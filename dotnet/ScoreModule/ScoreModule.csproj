@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>DjmaxScore</RootNamespace>
+    <AssemblyName>DjmaxScore</AssemblyName>
+  </PropertyGroup>
+
+  <!-- ONNX Runtime 의 판을 고정한다: 대조와 270개 검사를 이 판으로 했다. 올릴 때는 대조(ModuleCheck, FinderCheck)를 다시 돌린다 -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.31.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 규칙만 따로 보는 검사(ModuleCheck 의 restart)가 안쪽 클래스를 쓴다 -->
+    <InternalsVisibleTo Include="ModuleCheck" />
+  </ItemGroup>
+</Project>

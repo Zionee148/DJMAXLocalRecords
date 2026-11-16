@@ -1,0 +1,23 @@
+# 전용 Python 환경과 캐시
+.venv/
+__pycache__/
+*.pyc
+
+# 큰 자료 (추출 프레임, 학습용 묶음, 학습된 모델 중간 산출물, 검사 결과)
+data/
+*.npz
+*.pt
+
+# 빌드 결과와 만든 묶음
+bin/
+obj/
+dist/
+
+# 이 PC 에만 있는 폴더의 자리(개인 기록 폴더, 원본 녹화 폴더 등)
+local-paths.json
+
+# 앱 실행 자료(곡 목록, 숫자 표본, 오디오 기준)는 폴더 이름이 data 여도 git 에 넣는다
+!/app/runtime/data/
+
+# 영상에서 0.5초마다 뽑은 PNG (큰 자료). 검사 설정 JSON 만 git 에 넣는다
+testdata/**/*.png

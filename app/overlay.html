@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="ko">
+<meta charset="utf-8">
+<title>디맥 개인 기록 오버레이</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;background:transparent;overflow:hidden}
+[hidden]{display:none!important}
+#box{position:relative;width:540px;height:276px;border-radius:12px;overflow:hidden}
+#bg,#arrows,#content{position:absolute;inset:0}
+#bg,#arrows{pointer-events:none}
+#game{position:absolute;inset:22px 26px 15px;display:flex;flex-direction:column}
+#song{font-weight:700;line-height:1.3;margin-bottom:13px}
+.ellipsis{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#details{display:flex;gap:8px;align-items:center;min-height:39px;white-space:nowrap}
+#details span{padding:6px 13px;border-radius:7px;font-weight:700;line-height:1.35}
+#lower{min-height:0;flex:1}
+.panel{border-top:1px solid #ffffff23;margin-top:19px;padding-top:14px}
+#scores>div{display:flex;align-items:baseline;justify-content:space-between;gap:35px;line-height:1.6;white-space:nowrap}
+strong,#candidate,#result{font-variant-numeric:tabular-nums}
+#status,#confirmation{text-align:center;white-space:nowrap}
+#status{line-height:1.4}
+#statusMessage{height:64px;display:grid;place-items:center}
+#statusKeys{height:48px;display:grid;place-items:center}
+#confirmation{display:grid;gap:12px;justify-items:center;margin-top:13px;padding-top:8px;line-height:1.2}
+#question,#candidate{font-weight:700}
+#candidate{display:flex;align-items:stretch;gap:12px}
+#confirmDivider{width:1px;background:currentColor;opacity:.6;margin:6px 0}
+#intro,#result{position:absolute;inset:0 26px;display:grid;align-content:center;justify-items:center;text-align:center;min-width:0;overflow:hidden}
+#intro{gap:10px;font-weight:700}
+#eventTag{line-height:1.25;letter-spacing:.07em;white-space:nowrap}
+#eventTitle{line-height:1.28;white-space:nowrap}
+#result{gap:6px}
+.value{display:grid;justify-items:center;gap:2px;font-weight:700;line-height:1.12}
+#eventDetail,#eventPrevious{max-width:100%;line-height:1.3}
+#eventDetail{position:relative}
+#arrows{overflow:hidden}
+.arrow{position:absolute;bottom:-100px;width:1.6em;height:1.8em;opacity:0;color:#b1ed76}
+.arrow i{display:block;width:100%;height:100%;background:linear-gradient(to bottom,currentColor 0%,currentColor 12%,rgba(177,237,118,.72) 37%,rgba(177,237,118,.30) 70%,transparent 100%);clip-path:polygon(0 26%,50% 0,100% 26%,100% 100%,50% 74%,0 100%)}
+</style>
+<div id="box" hidden>
+  <div id="bg"></div><div id="arrows" aria-hidden="true"></div>
+  <div id="content">
+    <div id="game">
+      <div id="song" class="ellipsis"></div>
+      <div id="details"><span id="button"></span><span id="pattern"></span><span id="judge"></span></div>
+      <div id="lower">
+        <div class="panel" id="scores">
+          <div id="goal"><span>개인 최고 점수 :</span><strong></strong></div>
+          <div id="current"><span>현재 점수 :</span><strong></strong></div>
+        </div>
+        <div class="panel" id="status" hidden><div id="statusMessage"></div><div id="statusKeys"></div></div>
+        <div class="panel" id="confirmation" hidden>
+          <div id="question">등록하시겠습니까?</div>
+          <div id="candidate"><span id="confirmScore"></span><i id="confirmDivider"></i><span id="confirmRate"></span></div>
+          <div id="confirmKeys"></div>
+        </div>
+      </div>
+    </div>
+    <div id="intro" hidden><div id="eventTag"></div><div id="eventTitle"></div></div>
+    <div id="result" hidden>
+      <div class="value"><div id="eventRate"></div><div id="eventRateDelta"></div></div>
+      <div class="value"><div id="eventScore"></div><div id="eventScoreDelta"></div></div>
+      <div id="eventPrevious" class="ellipsis" hidden></div>
+      <div id="eventDetail" class="ellipsis"></div>
+    </div>
+  </div>
+</div>
+<script>
+const colors={'4B':['#008b50','#fff'],'5B':['#267e91','#fff'],'6B':['#bc7408','#fff'],'8B':['#5144ac','#fff'],NORMAL:['#edc52a','#241c0b'],HARD:['#ee781b','#241c0b'],MAXIMUM:['#e50068','#fff'],SC:['#a20bc3','#fff'],'노말판정':['#59616e','#fff'],'하드판정':['#b70c42','#fff'],'맥스판정':['#c211c9','#fff']};
+function arrows(){const defs=[[3,56,0,1950],[13,92,400,2300],[25,42,180,1650],[36,68,750,2100],[49,38,360,1850],[60,100,120,2450],[73,54,620,1950],[86,80,280,2200],[95,34,850,1600],[19,48,1500,1900],[55,60,1600,2000],[80,40,1750,1750]];const scale=el('box').clientHeight/290;defs.forEach(([x,size,delay,time])=>{const node=document.createElement('span');node.className='arrow';node.append(document.createElement('i'));node.style.left=x+'%';node.style.fontSize=size*scale+'px';node.style.marginLeft=-size*.8*scale+'px';el('arrows').append(node);const opacity=.38*(size>80?.7:1);node.animate([{transform:`translateY(${180*scale}px)`},{transform:`translateY(${-490*scale}px)`}],{duration:time*.52,delay:delay*.44,easing:'linear',fill:'both'});node.animate([{opacity:0},{opacity,offset:.2},{opacity,offset:.8},{opacity:0}],{duration:time*.52,delay:delay*.44,easing:'linear',fill:'both'})})}
+
+const el=id=>document.getElementById(id);
+const ctx=document.createElement('canvas').getContext('2d');
+const width=540,height=276,inner=width-52;
+const obsScale=2;
+const firstScoreColor='#86DCFF';
+const missing='악곡을 감지하고 있습니다';
+const popupId=location.pathname.match(/^\/popup\/([0-9a-f]{32})$/)?.[1];
+let popupReported=false;
+let lastPayload,lastState,lastScene,lastPanel,eventKey;
+const reduced=matchMedia('(prefers-reduced-motion: reduce)');
+const fade=(id)=>{if(!reduced.matches)el(id).animate([{opacity:0},{opacity:1}],{duration:220,easing:'ease-out'});};
+const fmtScore=n=>Number(n??0).toLocaleString('en-US');
+const fmtRate=n=>Number(n??0).toFixed(2)+'%';
+const px=(id,n)=>el(id).style.fontSize=n+'px';
+function fitViewport(){
+ el('box').style.zoom=Math.min(popupId?1:obsScale,innerWidth/width,innerHeight/height);
+ if(!popupId)return;
+ if(popupReported||outerWidth<=0||outerHeight<=0)return;
+ popupReported=true;
+ const chrome=[outerWidth,outerHeight,Math.max(0,outerWidth-innerWidth),Math.max(0,outerHeight-innerHeight)];
+ fetch('/popup-fit/'+popupId+'/'+[...chrome,width,height].map(Math.ceil).join('/'),{cache:'no-store'}).catch(()=>{popupReported=false;});
+}
+if(popupId)document.title='디맥 오버레이 팝업';
+addEventListener('resize',fitViewport);
+function measure(text,size,family,weight=700){
+ ctx.font=weight+' '+size+'px '+family;
+ return ctx.measureText(text).width;
+}
+function fit(text,size,family,weight=700,max=inner){
+ return size*Math.min(1,max/Math.max(1,measure(text,size,family,weight)));
+}
+function badge(id,text){
+ const [background,color]=colors[text]??['#59616e','#fff'];
+ const node=el(id);
+ node.textContent=text;node.style.background=background;node.style.color=color;
+}
+function setGame(s,a,family){
+ const c=s.confirmation??s.analysis;
+ const parts=c?[c.button+'B',c.pattern,c.judge+'판정']:(s.overlayDetails??'').split(' · ');
+ const detected=parts.length===3;
+ const badgeSize=a.BadgeSize??20;
+ let h=a.HeaderSize,b=badgeSize;
+ const upperLimit=c?91:105;
+ const scale=Math.min(1,upperLimit/(h*1.3+13+Math.max(39,b*1.35+12)));
+ h*=scale;
+ b*=Math.min(scale,(inner-94)/Math.max(1,['8B','MAXIMUM','맥스판정'].reduce((sum,text)=>sum+measure(text,b,family),0)));
+ px('song',h);px('details',b);
+ el('song').textContent=detected?(c?.song??s.overlayTitle??missing):missing;
+ el('details').style.visibility=detected?'visible':'hidden';
+ if(detected)parts.forEach((text,index)=>badge(['button','pattern','judge'][index],text));
+ const goal=detected?s.goal:null,current=detected?s.current:null;
+ const tone=goal==null||current==null?a.Text:current>=goal?a.Above:a.Below;
+ const label=(text,size)=>size*Math.min(1,(inner-35)/Math.max(1,measure(text,size,family,400)+measure('100.00%',size,family)));
+ let g=label('개인 최고 점수 :',a.GoalSize),r=label('현재 점수 :',a.CurrentSize);
+ const room=Math.max(55,239-(h*1.3+13+Math.max(39,b*1.35+12))-34);
+ const scoreScale=Math.min(1,room/(1.6*(g+(s.showCurrent?r:0))));
+ px('goal',g*scoreScale);px('current',r*scoreScale);
+ el('goal').querySelector('strong').textContent=!detected?'-':goal==null?'미등록':fmtRate(goal);
+ el('current').querySelector('strong').textContent=current==null?'-':fmtRate(current);
+ el('goal').style.color=s.showCurrent?a.Text:tone;
+ el('current').style.color=tone;el('current').hidden=!s.showCurrent;
+ const panel=s.confirmation?'confirmation':s.analysis?'status':'scores';
+ for(const id of ['scores','status','confirmation'])el(id).hidden=id!==panel;
+ if(lastPanel!==panel&&lastScene==='game')fade(panel);
+ lastPanel=panel;
+ if(s.analysis){
+  const failure=s.analysis.stage==='failure';
+  const message=failure?(s.analysis.reason||'점수를 확인하지 못했습니다'):'점수를 확인하고 있습니다...';
+  const keys=failure?'잠시 후 자동으로 취소됩니다':'취소 ('+(s.analysis.cancel||'—')+')';
+  el('statusMessage').textContent=message;el('statusKeys').textContent=keys;
+  px('statusMessage',fit(message,33.44,family,400));px('statusKeys',fit(keys,22.8,family,400));
+ }
+ if(s.confirmation){
+  const keys='등록 ('+(c.confirm||'—')+') / 취소 ('+(c.cancel||'—')+')';
+  el('confirmScore').textContent=fmtScore(c.score);el('confirmRate').textContent=fmtRate(c.accuracy);
+  el('confirmKeys').textContent=keys;
+  px('question',27);px('confirmKeys',fit(keys,20,family,400));
+  const size=Math.min(fit('1,000,000',44,family,700,(inner-25)/2),fit('100.00%',44,family,700,(inner-25)/2));
+  px('candidate',size);
+  const columns=Math.ceil(Math.max(measure('1,000,000',size,family),measure('100.00%',size,family)));
+  el('confirmScore').style.minWidth=el('confirmRate').style.minWidth=columns+'px';
+ }
+}
+function setResult(e,a,family){
+ const first=e.kind==='first',best=e.kind==='best',kept=!first&&!best;
+ const raw=e.score??Math.floor(Number(e.value)*100)*100;
+ const previous=e.previousScore??Math.floor(Number(e.previous)*100)*100;
+ const mark=kept?'▼':'▲';
+ el('eventTag').textContent=first?'FIRST SCORE SAVED':best?'NEW PERSONAL BEST':'PERSONAL BEST UNCHANGED';
+ el('eventTitle').textContent=first?'첫 기록 등록':best?'최고 기록 경신':'최고 기록 유지';
+ el('eventTag').style.color=first?firstScoreColor:best?a.Above:'#B7D8FF';
+ px('eventTag',fit(el('eventTag').textContent,(a.EventSize??50)*.52,family));
+ px('eventTitle',fit(el('eventTitle').textContent,a.EventSize??50,family));
+ el('eventRate').textContent=fmtRate(e.value);el('eventScore').textContent=fmtScore(raw);
+ el('eventRateDelta').textContent=mark+fmtRate(first?e.value:Math.abs(Number(e.value)-Number(e.previous)));
+ el('eventScoreDelta').textContent=mark+fmtScore(first?raw:Math.abs(raw-previous));
+ el('eventRate').style.color=el('eventScore').style.color=first?firstScoreColor:best?a.Above:a.Text;
+ el('eventRateDelta').style.color=el('eventScoreDelta').style.color=kept?'#63B7FF':'#FF747C';
+ const r=a.ResultRateSize??60,b=a.ResultScoreSize??36;
+ const footerDrop=kept?0:8;
+ const scale=Math.min(1,(height-12-4-(kept?18:12)-(kept?52:26)-2*footerDrop)/(1.12*(r+b+42)));
+ px('eventRate',fit('100.00%',r*scale,family));px('eventScore',fit('1,000,000',b*scale,family));
+ px('eventRateDelta',22*scale);px('eventScoreDelta',20*scale);
+ el('eventPrevious').hidden=!kept;el('eventPrevious').textContent='BEST SCORE  '+fmtScore(previous)+' | '+fmtRate(e.previous);
+ px('eventPrevious',fit(el('eventPrevious').textContent,20,family,400));
+ const suffix=' · '+e.button+'B · '+e.pattern+' · '+e.judge+'판정';
+ const song=String(e.song??'');
+ const chars=Array.from(song);
+ const room=inner-measure(suffix,20,family,400);
+ let title=song;
+ while(chars.length&&measure(title,20,family,400)>room){chars.pop();title=chars.join('')+'…';}
+ el('eventDetail').textContent=title+suffix;el('eventDetail').style.top=footerDrop+'px';px('eventDetail',20);
+}
+function render(s){
+ lastState=s;
+ const a=s.appearance;
+ if(!a)return;
+ const family=JSON.stringify(a.Font||'맑은 고딕')+',sans-serif';
+ el('box').hidden=!s.visible;
+ el('bg').style.background=a.Background;el('bg').style.opacity=1-a.BackgroundTransparency/100;
+ el('content').style.fontFamily=family;el('content').style.color=a.Text;el('content').style.opacity=1-a.TextTransparency/100;
+ fitViewport();
+ const e=s.lastEvent,age=e?Date.now()-e.at:Infinity;
+ const valid=s.visible&&!s.confirmation&&!s.analysis&&e?.kind&&age>=0&&age<7500;
+ const scene=valid?(age<1500?'intro':'result'):'game';
+ for(const id of ['game','intro','result'])el(id).hidden=id!==scene;
+ if(valid){
+  const key=e.at+':'+e.id;
+  setResult(e,a,family);
+  if(key!==eventKey){
+   eventKey=key;el('arrows').replaceChildren();
+   el('arrows').style.opacity=1-a.TextTransparency/100;
+   if(e.kind==='best'&&age<1500&&!reduced.matches)arrows();
+  }
+ }else{
+  if(eventKey){eventKey=null;el('arrows').replaceChildren();}
+  setGame(s,a,family);
+ }
+ if(lastScene&&scene!==lastScene)fade(scene);
+ lastScene=scene;
+}
+document.fonts?.ready.then(()=>{lastPayload=null;});
+async function tick(){
+ try{
+  const payload=await(await fetch('/state',{cache:'no-store'})).text();
+  if(payload!==lastPayload){render(JSON.parse(payload));lastPayload=payload;}
+  else if(lastState?.lastEvent&&!lastState.confirmation&&!lastState.analysis){
+   const age=Date.now()-lastState.lastEvent.at;
+   if(lastScene==='intro'&&age>=1500||lastScene==='result'&&age>=7500)render(lastState);
+  }
+ }catch{
+  lastPayload=null;
+  if(lastState)render({...lastState,overlayTitle:null,overlayDetails:'',goal:null,current:null,confirmation:null,analysis:null,lastEvent:null});
+ }
+ setTimeout(tick,100);
+}
+tick();
+</script>
+</html>
