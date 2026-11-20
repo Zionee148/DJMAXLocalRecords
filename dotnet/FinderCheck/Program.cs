@@ -1,7 +1,7 @@
-// 숫자 줄 탐지 모델을 .NET 에서 돌렸을 때 Python 과 같은 네모가 나오는지, 띠 한 장을 보는 데 얼마나 걸리는지 확인한다.
+// 숫자 줄 탐지 모델을 .NET 에서 돌렸을 때 Python 과 같은 검출 영역이 나오는지, 띠 한 장을 보는 데 얼마나 걸리는지 확인한다.
 //
 //   입력: 화면 아래쪽 띠(RGB, 340x960). 출력: 4화소마다 한 칸, 칸마다 [숫자 줄 안인가(로짓), 네 가장자리까지의 거리 ÷ 64].
-//   뒤처리(Python 의 find_rows 와 같다): 0.5 이상인 칸을 여덟 방향으로 이어 덩어리로 묶고, 덩어리마다 칸들이 가리키는 네모의 가운데 값을 낸다.
+//   뒤처리(Python 의 find_rows 와 같다): 0.5 이상인 칸을 여덟 방향으로 이어 덩어리로 묶고, 덩어리마다 칸들이 가리키는 사각형의 가운데 값을 검출 영역으로 낸다.
 //
 // 실행: dotnet run -c Release -- <finder.onnx> <data\parity_finder 폴더>
 using System.Diagnostics;
@@ -22,7 +22,7 @@ var expected = File.ReadAllLines(Path.Combine(folder, "expected.tsv")).Select(Pa
 using var session = new InferenceSession(modelPath);
 string inputName = session.InputMetadata.Keys.First();
 
-// ---------- 1) 같은 네모가 나오는가 ----------
+// ---------- 1) 같은 검출 영역이 나오는가 ----------
 int differCount = 0, boxes = 0;
 double worst = 0, worstScore = 0;
 for (int i = 0; i < count; i++)
@@ -36,7 +36,7 @@ for (int i = 0; i < count; i++)
         worstScore = Math.Max(worstScore, Math.Abs(found[k][4] - expected[i][k][4]));
     }
 }
-Console.WriteLine($"1) 네모 수가 다른 띠 {differCount} / {count}, 네모 좌표의 가장 큰 차이 {worst:F4}화소, 점수의 가장 큰 차이 {worstScore:F5} (견준 네모 {boxes}개)");
+Console.WriteLine($"1) 검출 영역 수가 다른 띠 {differCount} / {count}, 검출 영역 좌표의 가장 큰 차이 {worst:F4}화소, 점수의 가장 큰 차이 {worstScore:F5} (견준 검출 영역 {boxes}개)");
 
 // ---------- 2) 속도 ----------
 for (int i = 0; i < 10; i++) Find(session, bands[i % count]);

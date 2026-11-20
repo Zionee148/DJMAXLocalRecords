@@ -62,16 +62,16 @@ PRODUCT = "DJMAXLocalRecords"
 PROJECT = "app/DJMAXLadderRecords.csproj"
 # 빌드에 필요한 소스. 앱 프로젝트가 참조하는 프로젝트가 늘면 여기에 더한다
 SOURCES = ["app", "dotnet/ScoreModule"]
-# 묶음에 함께 넣는 라이선스·고지문. 저장소 맨 위의 것을 같은 이름으로 앱 폴더에 둔다(사용자 결정, 2026-11-17).
-# 자체 코드의 라이선스 파일과, 함께 들어가는 외부 라이브러리의 라이선스·고지문 원문 폴더다
+# 묶음에 함께 넣는 라이선스·고지문. 받은 사람이 묶음 안에서 조건을 확인할 수 있게, 저장소 맨 위의 것을 같은 이름으로 앱 폴더에 둔다.
+# 자체 코드의 라이선스 파일(LICENSE)과, 묶음에 포함된 외부 라이브러리의 라이선스·고지문 원문 폴더(licenses)다
 NOTICES = ["LICENSE", "licenses"]
 
-# 이 PC 에만 있는 폴더의 자리를 적어 두는 파일. git 에 넣지 않는다(.gitignore)
+# 개인 기록 폴더, 묶음 출력 폴더 같은 로컬 경로 설정 파일. git 에 넣지 않는다(.gitignore)
 LOCAL = ROOT / "local-paths.json"
 
 
 def local_path(key: str, env: str) -> Path | None:
-    """이 PC 에만 있는 폴더의 자리: 환경 변수, 없으면 local-paths.json 의 값. 어디에도 없으면 None.
+    """로컬 경로 설정에서 폴더 경로를 읽는다: 환경 변수, 없으면 local-paths.json 의 값. 어디에도 없으면 None.
 
     같은 것이 detector\\build_dataset.py 에도 있다(그쪽은 tools 를 불러오지 않는다)."""
     value = os.environ.get(env)
@@ -89,7 +89,7 @@ CARRY = ["records.json", "records.json.bak", "hotkeys.json", "preferences.json",
 DESIGN = "appearance.json"
 # 앱이 실행 중에 실행 파일 옆에 만드는 것. 빌드 결과에 있으면 안 되고 배포용에는 끝까지 없어야 한다
 USER_NAMES = {*CARRY, DESIGN, "records.json.tmp", "diagnostics", "update", "update-test.json"}
-# 프로그램 파일 목록. 자동 업데이트가 읽는다(app\UpdatePackage.cs 의 UpdateManifest 와 모양이 같아야 한다)
+# 프로그램 파일 목록. 자동 업데이트가 읽는다(app\UpdatePackage.cs 의 UpdateManifest 와 형식이 같아야 한다)
 MANIFEST = "update-manifest.json"
 TARGET = "win-x64"
 # 빌드 결과에서 빼는 것: 디버그 기호와 C++ 링크용 파일
@@ -165,7 +165,7 @@ def backup_of(target: Path, stamp: str) -> Path:
 def check_targets(out: Path, personal: Path | None, kinds: list[str]) -> None:
     """아무것도 쓰기 전에, 이번에 만드는 종류의 폴더가 개인 기록 폴더와 겹치는지 본다.
 
-    개인 기록 폴더를 알려 주지 않았으면 개인용은 만들지 않는다. 배포용은 지킬 폴더를 모르는 채로 만든다.
+    개인 기록 폴더를 알려 주지 않았으면 개인용은 만들지 않는다. 배포용은 겹침 확인 없이 만든다(보호할 폴더를 알 수 없다).
 
     place 는 그 폴더 바로 아래에 앱 폴더, 묶음정보.txt, (개인용은) 이전-appearance.json 을 두고, 같은 이름이 있으면
     그 자리에서 이름을 바꿔 남긴다. 저장할 곳의 맨 위나 앱 폴더만 견주면, 그 가운데 하나를 개인 기록 폴더로 가리켰을 때
@@ -418,7 +418,7 @@ def main() -> int:
     parser.add_argument("--personal", type=Path, default=DEFAULT_PERSONAL,
                         help="개인 기록 폴더. 개인용을 만들 때만 필요하다 (기본: %(default)s)")
     args = parser.parse_args()
-    # 다른 프로그램이 받아 적을 때도 줄 순서가 섞이지 않고, 못 쓰는 글자 때문에 멈추지 않게 한다
+    # 다른 프로그램이 출력을 받아 기록할 때도 줄 순서가 섞이지 않고, 인코딩할 수 없는 글자 때문에 멈추지 않게 한다
     for stream in (sys.stdout, sys.stderr):
         stream.reconfigure(errors="replace", line_buffering=True)
 
@@ -439,7 +439,7 @@ def main() -> int:
             make_app_folder(publish, source, app)
             notes = list(build_notes)
             # 여기까지가 프로그램 파일이다. 목록을 쓴 뒤에 개인 자료를 넣는다.
-            # 메모장 설명서(사용안내.txt)는 넣지 않는다. 사용법은 GitHub 페이지에서 안내한다(사용자 결정, 2026-11-16)
+            # 텍스트 설명서(사용안내.txt)는 묶음에 넣지 않는다. 사용법은 GitHub 페이지에서 안내한다
             notes.append("사용안내.txt: 넣지 않음(사용법은 GitHub 페이지에서 안내한다)")
             notes.append(f"라이선스·고지문: {', '.join(NOTICES)} (파일 {add_notices(source, app)}개)")
             write_manifest(app, args.version)

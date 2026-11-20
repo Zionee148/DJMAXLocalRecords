@@ -2,16 +2,16 @@
 //
 // 앱이 하는 것처럼 한다: 일정한 간격(기본 0.1초)으로 "캡처"해서 ScoreLink.Offer 로 넘기고, 키 시각에 BeginRequest, 매 캡처마다 Poll.
 // 녹화의 60장 가운데 캡처 시각에 해당하는 한 장만 넘긴다(나머지는 앱이 보지 못한 화면이다).
-// 시계는 가짜다: 모듈이 일하는 데 걸린 시간만큼 "바쁜" 것으로 치고, 그동안 온 플레이 중의 화면은 ScoreLink 가 버린다(요청 뒤의 화면은 줄을 선다).
+// 시계는 가짜다: 모듈이 일하는 데 걸린 시간만큼 "바쁜" 것으로 치고, 그동안 온 플레이 중의 화면은 ScoreLink 가 버린다(요청 뒤의 화면은 대기열에 쌓여 차례로 처리된다).
 // 일이 끝났다는 알림은 가짜 시계가 그 일이 끝나는 시각에 닿았을 때 간다(앱의 ScoreRunner 가 일이 끝난 뒤에야 화면 스레드에 알리는 것과 같다).
-// 그래서 호출이 느리면(--busy-ms) 요청 뒤의 화면이 줄에 쌓이고 답이 늦어지는 것이 그대로 나타난다.
+// 그래서 호출이 느리면(--busy-ms) 요청 뒤의 화면이 대기열에 쌓이고 답이 늦어지는 것이 그대로 나타난다.
 //
 // 실행: dotnet run -c Release -- link <finder.onnx> <reader.onnx> <cases.tsv> <결과.tsv> [--workers N] [--interval 초] [--busy-ms X] [--busy-scale K]
 //                                      [--ask-busy-ms X] [--miss N] [--stall 초] [--cancel-after 초 [--reask-after 초]] [--log <폴더>] [사례…]
 //   --interval   캡처 간격(앱의 타이머는 0.1초)
 //   --busy-ms    모듈 호출 하나가 걸리는 시간을 이 값으로 고정한다(안 주면 실제로 걸린 시간 × --busy-scale)
 //   --ask-busy-ms X   첫 등록 키부터는 모듈 호출 하나가 걸리는 시간을 이 값으로 고정한다(그 앞의 플레이 중에는 --busy-ms 나 실제 시간).
-//                캡처 간격보다 크게 주면 요청 뒤의 화면이 줄에 쌓인다(플레이 중의 근거는 그대로 둔 채 등록 중에만 일이 밀린 상태를 만든다)
+//                캡처 간격보다 크게 주면 요청 뒤의 화면이 대기열에 쌓인다(플레이 중의 근거는 그대로 둔 채 등록 중에만 일이 밀린 상태를 만든다)
 //   --miss N     캡처 N 번에 한 번은 화면을 못 얻은 것으로 친다(캡처 실패, 곡 정보가 엇갈림)
 //   --stall 초   키를 누른 직후 이만큼은 캡처가 멈춘 것으로 친다(앱이 잠깐 멈춤)
 //   --cancel-after 초   키를 누르고 이만큼 뒤에 요청을 취소한다(그때까지 답이 안 났을 때). --reask-after 를 안 주면 그 취소가 이 사례의 답이다
@@ -20,8 +20,8 @@
 //           8초를 넘겨 전해진 답이 Accepted 이면 "기한 뒤 수락"으로 센다. 하나라도 있으면 종료 코드 1.
 //   --phase 초   첫 캡처를 이만큼 늦춘다(어느 화면이 캡처되는지가 달라진다. 캡처 시점에 따라 갈리는 일을 다시 만들 때 쓴다)
 //   --log        진단 기록을 이 폴더 아래 작업자별 폴더에 남긴다
-//   --detect-every N, --part-wait 초   위치 찾기의 설정을 바꾼다(TrackerOptions. 고정 전 탐지 모델을 도는 간격, 일부만 읽는 자리의 고정을 미루는 시간).
-//                모듈의 기본값이 아니므로 "어느 줄기가 먼저 조건을 채우는가"를 일부러 바꿔 보는 시험에만 쓴다.
+//   --detect-every N, --part-wait 초   위치 찾기의 설정을 바꾼다(TrackerOptions. 고정 전 탐지 모델을 돌리는 간격, 일부만 읽는 자리의 고정을 미루는 시간).
+//                모듈의 기본값이 아니므로 "어느 추적 후보(Locator.Track)가 먼저 조건을 채우는가"를 일부러 바꿔 보는 시험에만 쓴다.
 using System.Diagnostics;
 using System.Globalization;
 using DjmaxScore;
@@ -59,7 +59,7 @@ public static class LinkRun
 
         private void Advance(long to)
         {
-            // 알림 안에서 다음 일을 맡기면(줄에 선 일) 그 일은 앞의 일이 끝난 시각에 시작한다.
+            // 알림 안에서 다음 일을 맡기면(대기열에 있던 일) 그 일은 앞의 일이 끝난 시각에 시작한다.
             while (_pending is { } p && p.At <= to)
             {
                 _pending = null;
@@ -170,7 +170,7 @@ public static class LinkRun
                 if (miss > 0 && captures % miss == 0) { missed++; link.Poll(); continue; }
                 ScoreFrame f = feeder.Frame(band, 0, 0);
                 long now = runner.Now;
-                // 화소는 화면마다 사본을 넘긴다. 일이 줄에 서 있는 동안 feeder 가 같은 버퍼에 다음 화면을 쓰기 때문이다
+                // 화소는 화면마다 사본을 넘긴다. 일이 대기열에 있는 동안 feeder 가 같은 버퍼에 다음 화면을 쓰기 때문이다
                 // (앱도 넘긴 화면을 일이 끝날 때까지 바꾸지 않는다. 일을 맡은 자리에서 바로 돌리던 때에는 사본이 필요 없었다).
                 link.Offer(new CapturedFrame(now, now, f.Width, f.Height, f.Stride, f.SourceWidth, f.SourceHeight, f.CropX, f.CropY), (byte[])feeder.Buffer.Clone(), c.Id);
                 link.Poll();
@@ -178,7 +178,7 @@ public static class LinkRun
                 if (answer is not null && cancelAt is null && reaskAt is null) break;
             }
             if (!asked) Ask(origin + (long)Math.Round(pressAt * Ticks));
-            // 녹화가 끝났다. 화면 없이 시계만 캡처 간격으로 흘려보낸다(돌던 일과 줄에 선 일이 끝나고, 기한이 지나 답이 나올 때까지).
+            // 녹화가 끝났다. 화면 없이 시계만 캡처 간격으로 앞으로 옮긴다(돌던 일과 대기열의 일이 끝나고, 기한이 지나 답이 나올 때까지).
             // 일이 밀려 있으면 기한을 한참 넘겨서야 답이 온다. 그것을 그대로 적으려고 넉넉히(가짜 시계로 10분) 기다린다.
             for (int k2 = 0; answer is null && k2 < 600 / interval; k2++) { runner.Now += (long)Math.Round(interval * Ticks); link.Poll(); }
             if (answer is null) throw new InvalidOperationException($"{c.Id}: 10분을 기다려도 답이 오지 않았다");

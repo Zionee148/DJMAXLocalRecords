@@ -1,10 +1,10 @@
-새 SCORE 모듈(DjmaxScore)이 쓰는 모델 파일. 앱은 실행 파일 옆 data\score\ 에서 읽는다.
+SCORE 모듈(DjmaxScore)이 쓰는 모델 파일. 앱은 실행 파일 옆 data\score\ 에서 읽는다.
 
-finder.onnx  숫자 줄 탐지 모델 d2 (전체 자료로 학습한 판). 만든 곳: data\locate_runs\d2\finder.onnx (detector.export_finder)
+finder.onnx  숫자 줄 탐지 모델 d2. 내보낸 경로: data\locate_runs\d2\finder.onnx (detector.export_finder)
              SHA256 e493cccffd0a2c870580844463cb4e1ff0ff291a9940725220ff737e1d149ba8
-reader.onnx  점수 판독 모델 v17. 만든 곳: data\runs\v17\reader.onnx (detector.export_onnx)
+reader.onnx  점수 판독 모델 v17. 내보낸 경로: data\runs\v17\reader.onnx (detector.export_onnx)
              SHA256 69c77899356365be750b0b2e5118697d8798f53c296dc370e8b6c6186bac0fc0
 
-입력 처리(자르는 여백, 크기 맞추기)는 dotnet\ScoreModule 의 코드에 있고 모델과 짝이 맞아야 한다. 모델을 바꾸면 이 파일의 해시도 고친다.
+입력 전처리(자르는 여백, 크기 맞추기)는 dotnet\ScoreModule 의 코드에 있다. 모델을 교체할 때 입력 크기와 전처리 방식이 일치하는지 확인하고, 이 파일의 해시도 고친다.
 학습에 쓴 것: LEFT·CENTER 녹화 180개. RIGHT 녹화 90개는 학습에 쓰지 않았다. 근거와 수치는 docs\기록\ 에 있다.
 ONNX Runtime 으로 CPU 에서 돈다. 그래픽 카드나 Python 은 필요 없다.

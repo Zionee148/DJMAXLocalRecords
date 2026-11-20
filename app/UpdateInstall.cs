@@ -91,8 +91,8 @@ sealed class UpdatePaths(string appDir)
 static class UpdateBackup
 {
  public const string InfoName="backup-info.json";
- /// <summary>손으로 하는 업데이트·복구의 안내가 있는 곳. 프로그램 폴더에는 안내 글을 따로 두지 않는다(사용자 결정, 2026-11-16).
- /// 이 주소는 내보낸 버전들이 계속 가리키므로 바꾸지 않는다(저장소의 첫 화면이고, 자세한 사용법은 거기서 이어진다).</summary>
+ /// <summary>수동 업데이트·복구의 안내가 있는 주소. 프로그램 폴더에는 안내 파일을 따로 두지 않는다.
+ /// 이 주소는 이미 배포한 버전들이 계속 가리키므로 바꾸지 않는다(저장소의 첫 화면이고, 자세한 사용법은 거기서 이어진다).</summary>
  public const string GuidePage="https://github.com/Zionee148/DJMAXLocalRecords";
  /// <summary>백업의 실행 파일로 이전 버전으로 되돌리는 방법(백업에 옛 프로그램이 온전히 있을 때 알린다).</summary>
  public static string HowToRestore(string backupDir)=>"이전 버전으로 되돌리려면 아래 파일을 실행해 주세요(되돌릴지 묻는 창이 뜹니다).\n"+Path.Combine(Program(backupDir),UpdateManifest.Executable)+"\n자세한 안내: "+GuidePage;
@@ -112,7 +112,7 @@ static class UpdateBackup
  }
  static void WriteInfo(string backupDir,BackupInfo info)=>File.WriteAllText(Path.Combine(backupDir,InfoName),JsonSerializer.Serialize(info,UpdatePaths.Indented));
 
- /// <summary>새 백업 폴더를 만들고 업데이트 직전의 기록·설정을 복사해 넣는다. 복사한 것이 원본과 같은지 견준다. 폴더의 이름을 돌려준다.
+ /// <summary>새 백업 폴더를 만들고 업데이트 직전의 기록·설정을 복사해 넣는다. 복사한 것이 원본과 같은지 SHA-256 으로 견주고, 다르면 IOException 을 던진다. 폴더의 이름을 돌려준다.
  /// 프로그램 파일은 교체할 때 이 폴더의 program\ 으로 옮겨진다.</summary>
  public static string Create(UpdatePaths paths,Version from,Version to)
  {
@@ -167,7 +167,7 @@ static class UpdateSwap
 {
  const int Attempts=12;internal static int Pause=250;   // 다시 해 보는 사이(밀리초)
 #if DEVELOPMENT_CHECKS
- /// <summary>검사가 실패를 끼워 넣는 자리. (한 일, 경로)를 받아 예외를 던지면 그 일이 실패한 것이 된다.</summary>
+ /// <summary>검사가 파일 작업에 실패를 주입하는 훅. (작업 종류 "move"·"copy"·"delete", 경로)를 받아 예외를 던지면 그 작업이 실패한 것으로 처리된다.</summary>
  internal static Action<string,string>? Probe;
 #endif
  static void Try(string what,string path,Action action)
@@ -365,7 +365,7 @@ static class UpdatePrepare
  public static async Task<string> Run(UpdatePaths paths,ReleaseInfo release,Action<int,string?,double?> report,CancellationToken cancel)
  {
   report(Download,null,0);
-  // 시작할 때의 뒷정리가 아직 돌고 있으면 먼저 멈춘다. 같은 자리(download, staging)를 이번 시도가 다시 쓴다
+  // 프로그램을 켤 때 시작한 임시 폴더 정리(UpdateStartup.CleanLater)가 아직 돌고 있으면 먼저 멈춘다. 같은 자리(download, staging)를 이번 시도가 다시 쓴다
   // 도중에 멈춘 지난 교체가 남긴 새 버전의 파일은 풀어 놓은 것을 지우기 전에 가려내 치워 둔다(가려내는 데 그 목록을 쓴다)
   await Task.Run(()=>{UpdateStartup.StopCleaning();CheckFolder(paths,release.Size);UpdateSwap.SetAside(paths);Clear(paths);},cancel);
   paths.Log($"업데이트 시작: {AppVersion.Text(AppVersion.Current)} → {AppVersion.Text(release.Version)}  ({release.Url})");

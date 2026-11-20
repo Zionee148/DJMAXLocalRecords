@@ -3,9 +3,8 @@
 쓰는 법 (프로젝트 폴더에서):
     .venv\\Scripts\\python.exe tools\\make_icon.py [--out <ico 파일>] [--preview <png 파일>]
 
-그림: 어두운 둥근 네모 위에 노랑에서 초록으로 물든 굵은 "90%". 사용자가 보낸 참고 그림(검은 바탕의 "90%")의 숫자 모양을 따라
-사용자가 고른 시안이다(2026-11-16. 그 앞의 그림은 확인 표시가 든 원이었다).
-글자를 타원과 다각형으로 직접 그린다. 글꼴 파일이나 참고 그림의 화소, 게임의 그림·로고·캐릭터를 쓰지 않는다.
+그림: 어두운 둥근 네모 위에 노랑에서 초록으로 이어지는 그러데이션의 굵은 "90%".
+숫자와 기호를 타원과 다각형으로 직접 그린다. 글꼴 파일이나 다른 그림의 화소, 게임의 그림·로고·캐릭터를 쓰지 않는다.
   9: 둥근 고리에서 왼쪽 아래로 곧게 뻗는 다리.   0: 세로로 긴 타원, 가운데 구멍은 좁다.   %: 고리 둘과 굵은 빗금.
 
 크게(1024) 그려서 줄인다. 32픽셀 이하는 바탕의 여백을 줄이고 글자를 더 크게 놓는다.
@@ -70,7 +69,7 @@ def zero(x: float, y: float, w: float, h: float) -> Image.Image:
 
 def percent(x: float, y: float, w: float, h: float) -> Image.Image:
     """%: 왼쪽 위와 오른쪽 아래의 고리, 오른쪽 위에서 왼쪽 아래로 가는 굵은 빗금(끝은 가로로 잘린다)."""
-    rx, ry, t = w * 0.23, h * 0.25, w * 0.150          # 고리의 반지름과 두께(참고 그림보다 조금 두껍게: 사용자 요청)
+    rx, ry, t = w * 0.23, h * 0.25, w * 0.150          # 고리의 반지름과 두께
     rings = []
     for cx, cy in ((x + rx, y + ry), (x + w - rx, y + h - ry)):
         rings.append(ImageChops.subtract(ellipse(cx, cy, rx, ry), ellipse(cx, cy, rx - t, ry - t)))
@@ -79,7 +78,7 @@ def percent(x: float, y: float, w: float, h: float) -> Image.Image:
 
 
 def text(left: float, width: float) -> tuple[Image.Image, float, float]:
-    """'90%' 를 left 에서 width 너비로, 세로는 가운데에 놓는다. (가림막, 글자의 위, 글자의 아래)"""
+    """'90%' 를 left 에서 width 너비로, 세로는 가운데에 놓는다. (글자 모양의 마스크, 글자의 위 y, 글자의 아래 y)를 돌려준다."""
     h = width * HEIGHT
     top = (N - h) / 2
     mask = union(nine(left, top, width * 0.305, h * 0.975),
@@ -119,7 +118,7 @@ def frames() -> dict[int, Image.Image]:
 
 
 def bmp_entry(image: Image.Image) -> bytes:
-    """ICO 안의 32비트 BMP: 머리(높이는 두 배로 적는다) + 아래에서 위로 BGRA + 1비트 가림막(모두 0. 투명은 알파가 맡는다)."""
+    """ICO 안의 32비트 BMP: 헤더(높이는 두 배로 적는다) + 아래 행부터 위로 BGRA + 1비트 마스크(모두 0. 투명도는 알파 채널로 나타낸다)."""
     w, h = image.size
     pixels = image.transpose(Image.FLIP_TOP_BOTTOM).tobytes("raw", "BGRA")
     mask = bytes(((w + 31) // 32) * 4 * h)

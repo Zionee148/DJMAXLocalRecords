@@ -1,11 +1,11 @@
 """사례의 원본 영상 구간을 처음부터 끝까지, 모든 프레임을 읽는다.
 
-0.5초 간격 검사는 예비 검사일 뿐이다. 사용자 기준(사례별 전체 프레임 99% 일치)은 원본의 모든 프레임으로 잰다.
+0.5초 간격 검사는 예비 검사일 뿐이다. 통과 기준(사례별 전체 프레임 99% 일치)은 원본의 모든 프레임으로 잰다.
 그림은 저장하지 않고(사례당 5천 장이 넘는다) 프레임별 판독만 남긴다.
 
-  - 영상 구간(파일·시작·끝)은 Codex 가 정리해 둔 목록을 읽는다 (읽기 전용).
-  - 프레임 번호와 시각은 Codex 의 전체 프레임 추출과 같은 방식(ffmpeg -ss 시작 -t 길이, 프레임 그대로)이라 서로 맞는다.
-  - 점수 영역 위치는 아직 Codex 인식기가 찾은 것을 쓴다.
+  - 영상 구간(파일·시작·끝)은 검사 설정의 사례 목록과 추출 목록에서 읽는다 (읽기 전용).
+  - 프레임 번호와 시각은 그 검사 설정의 전체 프레임 추출과 같은 방식(ffmpeg -ss 시작 -t 길이, 프레임 그대로)이라 서로 맞는다.
+  - 점수 영역 위치는 비교 기준으로 사용한 영역(기준 영역. 이전 인식기가 찾아 all270-results 에 적어 둔 area)을 쓴다.
 
 실행: .venv\\Scripts\\python.exe -m detector.full_frames <실행 이름> <사례> [사례 ...]   (사례 자리에 all 을 쓰면 전부)
 출력: data\\full\\<실행 이름>\\<사례>.npz  (index, pts, values, conf, texts, blank)
@@ -107,7 +107,7 @@ def main():
     table = sources()
     if wanted == ["all"]:
         ids = sorted(table)
-    elif wanted == ["left-center"]:                 # RIGHT 는 LEFT·CENTER 가 기준을 통과한 뒤에 본다 (사용자 결정)
+    elif wanted == ["left-center"]:                 # RIGHT 는 학습에 쓰지 않는 평가용이라, LEFT·CENTER 가 기준을 통과한 뒤에 본다
         ids = sorted(i for i in table if "-right-" not in i)
     else:
         ids = wanted

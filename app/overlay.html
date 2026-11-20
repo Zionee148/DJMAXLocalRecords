@@ -46,8 +46,8 @@ strong,#candidate,#result{font-variant-numeric:tabular-nums}
       <div id="details"><span id="button"></span><span id="pattern"></span><span id="judge"></span></div>
       <div id="lower">
         <div class="panel" id="scores">
-          <div id="goal"><span>개인 최고 점수 :</span><strong></strong></div>
-          <div id="current"><span>현재 점수 :</span><strong></strong></div>
+          <div id="goal"><span>개인 최고 점수:</span><strong></strong></div>
+          <div id="current"><span>현재 점수:</span><strong></strong></div>
         </div>
         <div class="panel" id="status" hidden><div id="statusMessage"></div><div id="statusKeys"></div></div>
         <div class="panel" id="confirmation" hidden>
@@ -123,7 +123,7 @@ function setGame(s,a,family){
  const goal=detected?s.goal:null,current=detected?s.current:null;
  const tone=goal==null||current==null?a.Text:current>=goal?a.Above:a.Below;
  const label=(text,size)=>size*Math.min(1,(inner-35)/Math.max(1,measure(text,size,family,400)+measure('100.00%',size,family)));
- let g=label('개인 최고 점수 :',a.GoalSize),r=label('현재 점수 :',a.CurrentSize);
+ let g=label('개인 최고 점수:',a.GoalSize),r=label('현재 점수:',a.CurrentSize);
  const room=Math.max(55,239-(h*1.3+13+Math.max(39,b*1.35+12))-34);
  const scoreScale=Math.min(1,room/(1.6*(g+(s.showCurrent?r:0))));
  px('goal',g*scoreScale);px('current',r*scoreScale);

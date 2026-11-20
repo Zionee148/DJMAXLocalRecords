@@ -1,8 +1,9 @@
 """SCORE 위치 탐색 (개발 중).
 
-생각의 뼈대
+탐색 원리
   1) 점수는 플레이하는 동안 계속 바뀌는 숫자 줄이다. 탐색 범위에서 "뚝뚝 끊겨 크게 바뀌는 작은 덩어리"를 후보로 잡는다.
-     배경 영상은 넓게, 기어 장식은 부드럽게 바뀌므로 크기와 둘레의 고요함으로 걸러진다. 기어별 좌표나 기어 구분은 쓰지 않는다.
+     배경 영상은 넓게, 기어 장식은 부드럽게 바뀌므로 덩어리의 크기로 거르고, 겹치는 후보 가운데서는 후보 영역 주변의 밝기 변화가
+     적은 쪽을 남긴다. 기어별 좌표나 기어 구분은 쓰지 않는다.
   2) 후보가 점수 줄인지는 판독기로 읽어 본 값이 점수 규칙대로 오르는지로 정한다 (콤보·배속·장식 숫자는 여기서 떨어진다).
   3) 고정할 영역은 숫자 줄 전체와 7자리까지의 여유를 담아야 한다.
 
@@ -16,7 +17,7 @@ import numpy as np
 T_SMALL = 8      # 이보다 작은 밝기 차이는 영상 압축 잡음으로 본다
 T_BIG = 28       # 획이 생기거나 사라질 때의 큰 차이
 LEVELS = (0.012, 0.05, 0.15)   # "자주 바뀜"의 기준: 프레임 쌍 가운데 이 비율 이상에서 크게 바뀐 화소
-QUIET = 0.06     # 이 비율 이하로만 바뀐 화소는 고요한 화소
+QUIET = 0.06     # 프레임 쌍 가운데 이 비율 이하에서만 밝기가 바뀐 화소는 "변화가 적은 화소"로 본다
 
 
 @dataclass
@@ -26,8 +27,8 @@ class Candidate:
     w: int
     h: int
     level: float      # 어느 기준에서 잡혔는지
-    quiet_ring: float  # 둘레에서 고요한 화소의 비율
-    fill: float       # 네모 안에서 자주 바뀐 화소의 비율
+    quiet_ring: float  # 후보 영역 주변에서 밝기 변화가 적은 화소의 비율
+    fill: float       # 후보 영역 안에서 자주 바뀐 화소의 비율
 
     @property
     def box(self):
@@ -69,7 +70,7 @@ def propose(big: np.ndarray, some: np.ndarray, pairs: int) -> list[Candidate]:
             ring_area = (x1 - x0) * (y1 - y0) - w * h
             ring = (quiet_sum(x0, y0, x1, y1) - quiet_sum(x, y, x + w, y + h)) / max(1, ring_area)
             found.append(Candidate(x, y, w, h, level, ring, area / (w * h)))
-    # 같은 자리에서 여러 기준으로 잡힌 것은 둘레가 더 고요한 쪽만 남긴다
+    # 같은 자리에서 여러 기준으로 잡힌 것은 주변의 밝기 변화가 더 적은 쪽만 남긴다
     found.sort(key=lambda c: -c.quiet_ring)
     kept: list[Candidate] = []
     for c in found:
@@ -79,7 +80,7 @@ def propose(big: np.ndarray, some: np.ndarray, pairs: int) -> list[Candidate]:
 
 
 def overlap(a, b) -> float:
-    """두 네모가 겹친 넓이 ÷ 작은 쪽 넓이."""
+    """두 사각형이 겹친 넓이 ÷ 작은 쪽 넓이."""
     w = min(a[2], b[2]) - max(a[0], b[0]); h = min(a[3], b[3]) - max(a[1], b[1])
     if w <= 0 or h <= 0:
         return 0.0

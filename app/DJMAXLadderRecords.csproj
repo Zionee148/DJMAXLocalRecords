@@ -1,12 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
  <PropertyGroup><OutputType>WinExe</OutputType><TargetFramework>net9.0-windows</TargetFramework><UseWindowsForms>true</UseWindowsForms><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable><AssemblyName>DJMAXLocalRecords</AssemblyName>
   <ApplicationIcon>AppIcon.ico</ApplicationIcon>
-  <!-- 새 SCORE 모듈의 실행 라이브러리(ONNX Runtime)는 윈도우 64비트용만 넣는다. 이 줄이 없으면 모든 운영체제용이 결과 폴더에 딸려 온다(340MB) -->
+  <!-- SCORE 모듈이 쓰는 ONNX Runtime 라이브러리는 Windows x64용만 배포에 포함한다. 이 설정이 없으면 모든 운영체제용 라이브러리가 빌드 결과 폴더에 함께 복사된다(340MB) -->
   <RuntimeIdentifier>win-x64</RuntimeIdentifier><SelfContained>false</SelfContained><AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
   <IncludeDevelopmentChecks Condition="'$(IncludeDevelopmentChecks)' == '' and '$(Configuration)' == 'Debug'">true</IncludeDevelopmentChecks>
-  <!-- 버전은 묶음을 만들 때 밖에서 준다(tools\make_bundle.py 의 version 인자가 -p:Version=1.2.3 으로 넘긴다). 주지 않은 빌드는 0.0.0 이고, 개발용 빌드로 보아 새 버전을 확인하지 않는다 -->
+  <!-- 버전은 배포 묶음을 만들 때 빌드 인자로 지정한다(tools\make_bundle.py 의 version 인자가 -p:Version=1.2.3 으로 넘긴다). 지정하지 않은 빌드는 0.0.0 이고, 개발용 빌드로 보아 새 버전을 확인하지 않는다 -->
   <Version Condition="'$(Version)' == ''">0.0.0</Version>
-  <!-- .NET 실행 환경을 포함해 묶을 때 다른 언어의 자원 폴더(cs, de, …)가 딸려 오지 않게 한다 -->
+  <!-- .NET 실행 환경을 포함해 묶을 때 다른 언어의 리소스 폴더(cs, de, …)가 함께 들어가지 않게 한다 -->
   <SatelliteResourceLanguages>ko</SatelliteResourceLanguages></PropertyGroup>
  <!-- 자동 업데이트의 시험용 빌드: 실행 파일 옆의 update-test.json 이 가리키는 시험 서버에서 새 버전을 찾는다. 배포하는 빌드에는 이 장치가 들어가지 않는다 -->
  <PropertyGroup Condition="'$(UpdateTestSource)' == 'true' or '$(IncludeDevelopmentChecks)' == 'true'">
@@ -26,10 +26,10 @@
   <EmbeddedResource Include="AppIcon.ico" LogicalName="LadderRecords.AppIcon.ico" />
   <Compile Remove="RecognitionFallback.cs;PlayTests.cs" />
   <None Update="overlay.html" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-  <!-- 실행에 필요한 자료(곡 목록, 숫자 표본, 호환 DLL, 오디오 기준). runtime\ 의 구조 그대로 빌드 결과 폴더에 복사한다 (2026-11-13 이관 때 더함) -->
+  <!-- 실행에 필요한 자료(곡 목록, 숫자 표본, 호환 DLL, 오디오 기준). runtime\ 의 구조 그대로 빌드 결과 폴더에 복사한다 -->
   <None Remove="runtime\**\*" />
   <Content Include="runtime\**\*" Link="%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-  <!-- 새 SCORE 모듈(DjmaxScore). 모델 파일은 runtime\data\score\ 에 있다 -->
+  <!-- SCORE 모듈(DjmaxScore). 모델 파일은 runtime\data\score\ 에 있다 -->
   <ProjectReference Include="..\dotnet\ScoreModule\ScoreModule.csproj" />
   <Reference Include="Microsoft.Windows.SDK.NET"><HintPath>lib\winsdk\Microsoft.Windows.SDK.NET.dll</HintPath></Reference>
   <Reference Include="WinRT.Runtime"><HintPath>lib\winsdk\WinRT.Runtime.dll</HintPath></Reference>

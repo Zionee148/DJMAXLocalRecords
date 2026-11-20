@@ -2,12 +2,12 @@
 
 앱이 하듯이 사례 구간의 처음부터 0.1초 간격 화면을 차례로 넣는다. 위치도, 기어도, 점수도 알려 주지 않는다.
 
-  1) 숫자 줄 탐지 모델이 화면 아래쪽 띠에서 후보 네모를 낸다 (0.3초마다).
-  2) 같은 자리에서 계속 잡히는 후보를 한 줄기로 묶고, 그 자리를 판독기로 읽는다 (0.1초마다).
-  3) 읽힌 값들이 어떤 노트 수의 점수 규칙에 맞게 오르면 그 줄기를 점수 줄로 고정한다.
+  1) 숫자 줄 탐지 모델이 화면 아래쪽 띠에서 후보가 되는 검출 영역을 낸다 (0.3초마다).
+  2) 같은 자리에서 계속 잡히는 검출 영역을 하나의 추적 후보로 묶고, 그 자리를 판독기로 읽는다 (0.1초마다).
+  3) 읽힌 값들이 어떤 노트 수의 점수 규칙에 맞게 오르면 그 추적 후보를 점수 줄로 고정한다.
      콤보·배속·장식 숫자는 점수 규칙대로 오르지 않으므로 여기서 떨어진다.
 
-채점 (찾은 자리가 맞는지는 Codex 영역과의 겹침이 아니라 "그 자리를 읽은 결과"로 본다)
+채점 (찾은 자리가 맞는지는 기준 영역과의 겹침이 아니라 "그 자리를 읽은 결과"로 본다. 기준 영역은 검사 설정에 적힌 점수 영역으로, 비교에만 쓴다)
   - 고정한 자리로 그 사례의 0.5초 간격 화면 전체를 다시 읽어, 등록 시점의 최종 점수가 기대 점수와 같은지 본다.
   - 탐지 모델은 그 기어를 빼고 학습한 것을 쓴다 (처음 보는 기어 디자인).
   - 고정 시각은 "v6 판독에서 점수가 처음 읽힌 시각"으로부터의 시간으로 적는다. 실제 플레이 시작 라벨이 아직 없어서
@@ -15,6 +15,7 @@
 
 실행: .venv\\Scripts\\python.exe -m detector.locate_run <탐지 실행 이름> <판독 실행 이름> [사례 ...]
 출력: data\\locate_runs\\<탐지 이름>\\run-<판독 이름>.csv
+      (열 이름 "줄기 수"는 추적 후보의 수, "네모"는 고정한 영역, "Codex 영역과 겹침"은 기준 영역과 겹친 정도다)
 """
 import csv
 import json
@@ -49,24 +50,24 @@ DETECT_EVERY = 3          # 탐지 모델은 0.3초마다
 READ_CONF = 0.5
 LOCK_VALUES = 12          # 규칙대로 오른 서로 다른 값이 이만큼 모이면 고정
 WATCH = 25.0              # 첫 점수 뒤 이만큼까지 본다
-EXTRA_X = int(os.environ.get("LOCATE_EXTRA_X", "0"))   # 시험용: 네모 양옆에 더 주는 여유(화소)
+EXTRA_X = int(os.environ.get("LOCATE_EXTRA_X", "0"))   # 시험용: 자를 영역 양옆에 더 주는 여유(화소)
 MIN_AGREE = 0.6           # 읽힌 값 가운데 규칙을 통과한 비율이 이보다 낮으면 최종 점수를 내지 않는다
 GROW = os.environ.get("LOCATE_GROW", "1") == "1"       # 고정 뒤에도 탐지 모델로 영역을 넓힐지
 LOCK_PAD = float(os.environ.get("LOCATE_LOCK_PAD", "0"))   # 고정할 때 양옆에 미리 두는 여유의 배율 (0 = 두지 않음)
 
 
-MOVING = 0.45             # 잡힌 네모들의 가운데 높이가 이만큼(네모 높이의 배율) 넘게 오르내리면 "점수판이 위아래로 움직인다"고 본다
-MOVING_SEEN = 30          # 그 판단에 필요한 네모의 수. 탐지 모델이 숫자 줄을 가끔만 잡는 기어는 몇 안 되는 네모가 흔들려 잘못 걸린다:
-                          # EXTENSION 3 CENTER 는 160장 가운데 16장만 잡혔고 그 네모들이 10화소쯤 흔들려(배율 0.37) 움직이는 것으로 걸렸고,
+MOVING = 0.45             # 잡힌 검출 영역들의 가운데 높이가 이만큼(검출 영역 높이의 배율) 넘게 오르내리면 "점수판이 위아래로 움직인다"고 본다
+MOVING_SEEN = 30          # 그 판단에 필요한 검출 영역의 수. 탐지 모델이 숫자 줄을 가끔만 잡는 기어는 몇 안 되는 검출 영역이 흔들려 잘못 걸린다:
+                          # EXTENSION 3 CENTER 는 160장 가운데 16장만 잡혔고 그 검출 영역들이 10화소쯤 흔들려(배율 0.37) 움직이는 것으로 걸렸고,
                           # 따라가다가 규칙 통과율이 100% → 1.6% 로 무너졌다. welcome to the space 는 158장이 잡히고 배율 0.58, 가만히 있는 기어는 0.02 다.
 
 
 def vertical_range(tops, bottoms) -> tuple[float, float, bool]:
     """고정 뒤 영역의 세로 범위 (위, 아래)와, 점수판이 위아래로 움직이는 기어인지.
 
-    세로는 잡힌 네모들의 가운데 값이다(숫자 줄의 높이는 변하지 않는다).
+    세로는 잡힌 검출 영역들의 가운데 값이다(숫자 줄의 높이는 변하지 않는다).
     기어 전체가 위아래로 움직여 점수판이 따라 움직이는 기어가 있다(welcome to the space). 가운데 값으로 두면 점수판이 올라가거나
-    내려앉은 때 숫자가 잘린다. Codex 의 위치 탐색은 이 움직임을 알아채고 세로 범위를 넓게 잡았다(사용자, 2026-11-12).
+    내려앉은 때 숫자가 잘린다. 이전 인식기의 위치 탐색은 이 움직임을 알아채고 세로 범위를 넓게 잡았다.
     같은 식으로 오르내린 범위(5%~95%)를 모두 담아 봤더니 오히려 나빠졌다(3-05 LEFT 의 규칙 통과율 96.3% → 93.0%):
     영역이 높아지면 숫자가 작게 들어가고, 판독기는 위아래로 넓게 자른 조각을 배운 적이 없다.
     그래서 여기서는 움직이는지만 알려 주고, 움직이는 점수판은 따라가며 자른다 (locate_video.follow_steps).
@@ -96,7 +97,7 @@ POSES = [(angle, center, 0.36) for angle in (-45, -30, -15, 15, 30, 45) for cent
 
 
 def part_of(image, box):
-    """네모 둘레에 판독기가 익숙한 여백을 두고 자른 조각 (BGR)."""
+    """주어진 영역 둘레에 판독기가 학습 때 본 것과 같은 여백을 두고 자른 조각 (BGR)."""
     x0, y0, x1, y1 = box
     xa, ya = max(0, int(round(x0)) - MARGIN_X - EXTRA_X), max(0, int(round(y0)) - MARGIN_Y)
     xb, yb = min(image.shape[1], int(round(x1)) + MARGIN_X + EXTRA_X), min(image.shape[0], int(round(y1)) + MARGIN_Y)
@@ -121,18 +122,18 @@ def crop_for_reader(image, box, pose=None):
 
 
 def lock_area(box, band_x0: int):
-    """고정한 네모(띠 좌표) → 화면 전체 좌표의 고정 영역. 양옆에 숫자 한두 자리만큼의 여유를 미리 둔다.
+    """고정한 검출 영역(띠 좌표) → 화면 전체 좌표의 고정 영역. 양옆에 숫자 한두 자리만큼의 여유를 미리 둔다.
 
     영역 넓히기는 숫자 줄이 넓게 잡힌 것을 두 번 본 뒤에야 넓힌다. 그 사이에 자릿수가 늘면 끝자리가 잘린 채 읽힌다
     (welcome to the space LEFT 의 전체 프레임에서 110장). 판독기 v8 은 양옆 40화소까지 넓게 잘라도 결과가 같았으므로
-    처음부터 네모 높이의 0.8배(20~40화소)를 양옆에 더 둔다.
+    처음부터 검출 영역 높이의 0.8배(20~40화소)를 양옆에 더 둔다.
     """
     pad = float(np.clip(0.8 * (box[3] - box[1]), 20, 40)) * LOCK_PAD
     return (max(0.0, box[0] + band_x0 - pad), box[1] + TOP, min(1920.0, box[2] + band_x0 + pad), box[3] + TOP)
 
 
 class Track:
-    """한 자리에서 계속 잡히는 후보. 기운 줄 가설은 같은 자리를 다른 자세로 읽는 "딸린 줄기"로 따로 둔다.
+    """한 자리에서 계속 잡히는 검출 영역을 묶은 추적 후보. 기운 줄 가설은 같은 자리를 다른 자세로 읽는 "하위 추적 후보"(child)로 따로 둔다.
 
     처음에는 안 읽히는 자리의 자세를 통째로 바꿨는데, 점수가 아직 뜨지 않은 곡 초반에 멀쩡한 자리를 기운 줄로
     바꿔 버려 KARTRIDER·PIXEL ART·TECHNIKA 3 를 놓쳤다. 그래서 원래 읽기는 건드리지 않는다.
@@ -152,7 +153,7 @@ class Track:
 
 @torch.no_grad()
 def locate(frames: np.ndarray, finder, reader, debug: list | None = None):
-    """프레임을 차례로 보며 점수 줄을 고정한다. (고정한 네모 또는 None, 고정 프레임 번호, 줄기 수, 고정 때의 노트 수 추정)"""
+    """프레임을 차례로 보며 점수 줄을 고정한다. (고정한 영역 또는 None, 고정 프레임 번호, 추적 후보 수, 고정 때의 노트 수 추정, 읽은 자세)"""
     tracks: list[Track] = []
     for i, frame in enumerate(frames):
         at = i / FPS
@@ -178,12 +179,12 @@ def locate(frames: np.ndarray, finder, reader, debug: list | None = None):
                 t.parts = (t.parts + [part_of(frame, t.box).copy()])[-8:]
         for t in [t for t in live if t.root is t]:
             # 2초 넘게 지켜봤는데 거의 읽히지 않는 자리는 기운 줄일 수 있다. 여러 자세로 읽어 보고, 훨씬 또렷이 읽히는 자세가 있으면
-            # 그 자세로 읽는 딸린 줄기를 하나 둔다. 그 줄기도 점수 규칙을 통과해야만 고정된다.
+            # 그 자세로 읽는 하위 추적 후보를 하나 둔다. 그 추적 후보도 점수 규칙을 통과해야만 고정된다.
             recent = t.values[-20:]
             if len(t.values) < 20 or len(t.parts) < 6 or at - t.pose_checked < 3.0 or sum(v > 0 for v in recent) >= 8:
                 continue
             t.pose_checked = at
-            # 조각들은 그때그때의 네모로 잘라 둔 것이라 크기가 한두 화소씩 다르다. 예전에는 크기가 다르면 건너뛰었는데,
+            # 조각들은 그때그때의 검출 영역으로 잘라 둔 것이라 크기가 한두 화소씩 다르다. 예전에는 크기가 다르면 건너뛰었는데,
             # 그래서 이 검사가 한 번도 돌지 않았다: CYTUS 는 탐지 모델이 숫자 줄을 잘 잡고(168번) 30도 기울여 읽으면 전부 읽히는데도
             # 세 위치 모두 고정하지 못했다(2026-11-13 에 찾음). 가장 최근 조각의 크기에 맞춘다.
             height, width = t.parts[-1].shape[:2]
@@ -219,12 +220,12 @@ def locate(frames: np.ndarray, finder, reader, debug: list | None = None):
             if len(good) >= LOCK_VALUES:
                 locked.append((max(good), t, fit.notes))
         if locked:
-            # 바로 읽히는 줄기가 고정 조건을 채웠으면 기울여 읽는 딸린 줄기보다 그것을 먼저 쓴다 (15도쯤 기울여도 읽히는 글꼴이 있어,
-            # 같은 자리의 딸린 줄기가 함께 조건을 채울 수 있다. 기울여 읽은 쪽은 한 장씩의 판독이 더 나쁘다).
+            # 바로 읽히는 추적 후보가 고정 조건을 채웠으면 기울여 읽는 하위 추적 후보보다 그것을 먼저 쓴다 (15도쯤 기울여도 읽히는 글꼴이 있어,
+            # 같은 자리의 하위 추적 후보가 함께 조건을 채울 수 있다. 기울여 읽은 쪽은 한 장씩의 판독이 더 나쁘다).
             straight = [x for x in locked if x[1].pose is None]
             _, t, notes = max(straight or locked, key=lambda x: x[0])
             return t.box, i, len(tracks), notes, t.pose
-    if debug is not None:                                    # 고정하지 못했을 때: 줄기마다 무엇이 읽혔는지
+    if debug is not None:                                    # 고정하지 못했을 때: 추적 후보마다 무엇이 읽혔는지
         for t in sorted(tracks, key=lambda t: -len(t.root.boxes))[:8]:
             seen = [v for v in t.values if v > 0]
             fit = fit_notes(set(seen)) if len(set(seen)) >= 15 else None
@@ -238,7 +239,7 @@ def locate(frames: np.ndarray, finder, reader, debug: list | None = None):
 def better_area(image, offset: int, area, proposed, reader) -> bool:
     """영역을 바꾸기 전에 두 영역을 같은 화면에서 읽어 본다. 바꿔도 되는 경우만 True.
 
-    고정 영역은 "읽힌 값이 점수 규칙대로 오른다"는 것으로 확인된 자리다. 탐지 모델의 네모만 믿고 옮기면 숫자 위의 글자 줄로
+    고정 영역은 "읽힌 값이 점수 규칙대로 오른다"는 것으로 확인된 자리다. 탐지 모델의 검출 영역만 믿고 옮기면 숫자 위의 글자 줄로
     옮겨 가기도 한다 (TECHNIKA 2·MUSE DASH·Don't Die 의 전체 프레임 통과율이 0% 로 무너졌다). 그래서
       - 지금 영역이 읽히고 새 영역도 같은 값을 그만큼 또렷이 읽으면 바꾼다 (자리를 다듬는 경우)
       - 지금 영역이 읽은 숫자열이 새 영역이 읽은 숫자열의 일부면 바꾼다 (잘렸던 자리가 들어온 경우)
@@ -258,7 +259,7 @@ def read_whole_case(case, box_abs, reader, pose=None, finder=None, band_x0: int 
     """고정한 자리(화면 전체 좌표)로 0.5초 간격 화면 전체를 읽어 최종 점수를 판단한다.
 
     finder 를 주면 고정한 뒤에도 탐지 모델을 계속 돌려, 고정 영역과 겹치는 숫자 줄이 더 넓게 잡히면 영역을 넓힌다.
-    가운데 정렬 기어는 자릿수가 늘면서 숫자 줄이 고정 때의 네모 밖으로 나가기 때문이다 (welcome to the space LEFT 에서
+    가운데 정렬 기어는 자릿수가 늘면서 숫자 줄이 고정 때의 영역 밖으로 나가기 때문이다 (welcome to the space LEFT 에서
     끝자리가 잘려 틀린 점수가 나왔다). 영역은 넓어지기만 하고, 두 번 잇달아 같은 자리에서 잡혀야 넓힌다.
 
     돌려주는 값: (최종 점수 또는 None, 플레이 프레임 중 규칙 통과 비율, 보류 이유, 읽힌 값 가운데 규칙 통과 비율, 마지막 영역,
@@ -284,8 +285,8 @@ def read_whole_case(case, box_abs, reader, pose=None, finder=None, band_x0: int 
                 if overlap(box, area) >= 0.5 and 0.6 <= (box[3] - box[1]) / (area[3] - area[1]) <= 1.6:
                     near = box; break
             if near is not None and waiting is not None and iou(near, waiting) >= 0.7:
-                # 가로는 넓어지기만 한다(자릿수가 는다). 세로는 숫자 줄의 높이가 변하지 않으므로, 지금까지 잡힌 네모들의 가운데 값을 쓴다.
-                # 세로를 고정 때의 네모 그대로 두면 아래가 잘려(welcome to the space LEFT: 3·8·9 혼동) 나빠졌고, 합쳐서 넓히기만 하면
+                # 가로는 넓어지기만 한다(자릿수가 는다). 세로는 숫자 줄의 높이가 변하지 않으므로, 지금까지 잡힌 검출 영역들의 가운데 값을 쓴다.
+                # 세로를 고정 때의 영역 그대로 두면 아래가 잘려(welcome to the space LEFT: 3·8·9 혼동) 나빠졌고, 합쳐서 넓히기만 하면
                 # 조각이 커져 글자가 작게 들어간다.
                 tops.append(near[1]); bottoms.append(near[3])
                 top, bottom, _ = vertical_range(tops, bottoms)
@@ -314,9 +315,9 @@ def read_whole_case(case, box_abs, reader, pose=None, finder=None, band_x0: int 
 def main():
     finder_name, reader_name = sys.argv[1], sys.argv[2]
     wanted = set(sys.argv[3:])
-    use_codex = "--codex-area" in wanted                    # 시험 도구 자체의 점검: Codex 영역을 그대로 넣어 읽어 본다
+    use_codex = "--codex-area" in wanted                    # 시험 도구 자체의 점검: 위치를 찾지 않고 기준 영역을 그대로 넣어 읽어 본다
     wanted.discard("--codex-area")
-    use_all = "--all-model" in wanted                       # 기어 90종 전부로 학습한 탐지 모델 (실제로 쓸 판. 처음 보는 기어 시험이 아니다)
+    use_all = "--all-model" in wanted                       # 기어 90종 전부로 학습한 탐지 모델 (실제로 쓸 버전. 처음 보는 기어 시험이 아니다)
     wanted.discard("--all-model")
     cases = [c for c in json.loads((VALIDATION / "candidate-v4" / "all270.json").read_text(encoding="utf-8")) if c["position"] in BAND]
     if wanted:
@@ -350,9 +351,9 @@ def main():
             box, lock_frame, tracks, notes, pose = locate(frames, finders[fold], reader, notes_debug)
             box_abs = None if box is None else lock_area(box, x0)
             if notes_debug:
-                print(f"  견줌 네모(띠 좌표): {[ref[0] - x0, ref[1] - TOP, ref[2] - x0, ref[3] - TOP] if ref else None}")
+                print(f"  기준 영역(띠 좌표): {[ref[0] - x0, ref[1] - TOP, ref[2] - x0, ref[3] - TOP] if ref else None}")
                 for line in notes_debug:
-                    print("  줄기", line)
+                    print("  추적 후보", line)
         row.update({"줄기 수": tracks, "고정": "예" if box_abs else "아니오", "고정 시각": "", "첫 점수 뒤(초)": "", "노트 수 추정": notes or "",
                     "네모": "", "마지막 영역": "", "읽힌 값의 규칙 통과 비율": "",
                     "자세(각도·띠 중심·띠 높이)": "" if pose is None else " ".join(str(v) for v in pose),
@@ -367,7 +368,7 @@ def main():
                         "판정": "보류" if final is None else ("맞음" if final == c["registration"]["expected"] else "틀림")})
         rows.append(row)
         print(f"[{n}/{len(cases)}] {case_id} {row['기어'][:16]:<16} 고정 {row['고정']} 첫 점수 뒤 {row['첫 점수 뒤(초)'] or '-':>5}초 겹침 {row['Codex 영역과 겹침'] or '-':>4} "
-              f"{row['판정']} {row['보류 이유']} 네모 [{row['네모']}] → [{row['마지막 영역']}] 견줌 {ref} 규칙 통과 {row['읽힌 값의 규칙 통과 비율']} "
+              f"{row['판정']} {row['보류 이유']} 처음 고정한 영역 [{row['네모']}] → 마지막 영역 [{row['마지막 영역']}] 기준 영역 {ref} 규칙 통과 {row['읽힌 값의 규칙 통과 비율']} "
               f"최종 {row['최종 점수']}/{row['기대 점수']} ({time.time() - started:.0f}초)", flush=True)
     out = RUNS / finder_name / (f"run-{reader_name}{'-codex-area' if use_codex else ''}{'-all-model' if use_all else ''}{f'-extra{EXTRA_X}' if EXTRA_X else ''}.csv")
     if not wanted:

@@ -1,13 +1,14 @@
-"""위치 탐색이 찾은 자리로 읽은 전체 프레임 결과를, Codex 영역으로 읽은 결과와 사례별로 견준다 (LEFT·CENTER).
+"""위치 탐색이 찾은 자리로 읽은 전체 프레임 결과를, 비교 기준으로 사용한 영역(기준 영역. 검사 설정에 적힌 점수 영역)으로 읽은 결과와
+사례별로 견준다 (LEFT·CENTER).
 
 독립 정답이 없으므로 여기서도 일치율은 말할 수 없다. 보는 것은 세 가지다.
   - 규칙 통과율: 찾은 자리로 읽은 값이 점수 규칙을 통과한 프레임의 비율. "고정 뒤"와 "고정 전까지 포함"을 따로 낸다.
-    플레이 구간은 Codex 영역으로 읽은 쪽의 것을 쓴다(규칙을 통과한 첫 점수 ~ 등록 키 직전). 고정 전 프레임은 읽지 않은 것으로 센다.
-  - 같은 프레임을 두 자리에서 읽은 값이 같은가: Codex 영역 쪽이 규칙 통과로 읽은 프레임을 찾은 자리 쪽이 다르게 읽은 수.
+    플레이 구간은 기준 영역으로 읽은 쪽의 것을 쓴다(규칙을 통과한 첫 점수 ~ 등록 키 직전). 고정 전 프레임은 읽지 않은 것으로 센다.
+  - 같은 프레임을 두 자리에서 읽은 값이 같은가: 기준 영역 쪽이 규칙 통과로 읽은 프레임을 찾은 자리 쪽이 다르게 읽은 수.
   - 최종 점수 (full_summary 와 같은 판단).
 
-실행: .venv\\Scripts\\python.exe -m detector.locate_compare <Codex 영역으로 읽은 실행> <찾은 자리로 읽은 실행>
-출력: data\\full\\<찾은 자리 실행>\\compare.csv
+실행: .venv\\Scripts\\python.exe -m detector.locate_compare <기준 영역으로 읽은 실행> <찾은 자리로 읽은 실행>
+출력: data\\full\\<찾은 자리 실행>\\compare.csv (열 이름 "Codex 영역 통과율"·"Codex 쪽 통과 프레임"은 기준 영역으로 읽은 쪽의 값이다)
 """
 import csv
 import json
@@ -70,20 +71,20 @@ def main():
         return f"99% 이상 {int((v >= .99).sum())} / 95~99% {int(((v >= .95) & (v < .99)).sum())} / 90~95% {int(((v >= .90) & (v < .95)).sum())} / 90% 미만 {int((v < .90).sum())}"
 
     print("규칙 통과율 (일치율이 아니다)")
-    print("  Codex 영역으로 읽음   :", bins("Codex 영역 통과율", rows))
+    print("  기준 영역으로 읽음     :", bins("Codex 영역 통과율", rows))
     print("  찾은 자리, 고정 뒤     :", bins("고정 뒤 통과율", found))
     print("  찾은 자리, 고정 전 포함:", bins("고정 전 포함 통과율", found))
     before = np.array([r["고정 전 프레임"] for r in found])
     print(f"고정 전 플레이 프레임: 중앙값 {int(np.median(before))}장, 가장 많은 사례 {int(before.max())}장")
     total = sum(r["Codex 쪽 통과 프레임"] for r in found)
-    print(f"Codex 영역 쪽이 규칙 통과로 읽은 고정 뒤 프레임 {total:,}장 가운데, 찾은 자리 쪽이 다르게 읽음 {sum(r['그중 다르게 읽음'] for r in found):,}장, "
+    print(f"기준 영역 쪽이 규칙 통과로 읽은 고정 뒤 프레임 {total:,}장 가운데, 찾은 자리 쪽이 다르게 읽음 {sum(r['그중 다르게 읽음'] for r in found):,}장, "
           f"못 읽음 {sum(r['그중 못 읽음(고정 뒤)'] for r in found):,}장")
     worse = [r for r in found if r["Codex 영역 통과율"] and float(r["Codex 영역 통과율"]) >= .99 and float(r["고정 뒤 통과율"] or 0) < .99]
-    print("Codex 영역으로는 99% 이상인데 찾은 자리(고정 뒤)로는 못 미치는 사례:", len(worse))
+    print("기준 영역으로는 99% 이상인데 찾은 자리(고정 뒤)로는 못 미치는 사례:", len(worse))
     for r in sorted(worse, key=lambda r: float(r["고정 뒤 통과율"] or 0))[:25]:
         print(f"  {r['사례']:<22} {r['기어'][:18]:<18} {r['Codex 영역 통과율']} → {r['고정 뒤 통과율']}  다르게 {r['그중 다르게 읽음']}, 못 읽음 {r['그중 못 읽음(고정 뒤)']}")
     better = [r for r in found if r["Codex 영역 통과율"] and float(r["Codex 영역 통과율"]) < .99 and float(r["고정 뒤 통과율"] or 0) >= .99]
-    print("거꾸로(Codex 영역으로는 못 미치는데 찾은 자리로는 99% 이상):", [f"{r['사례']} {r['기어']}" for r in better])
+    print("거꾸로(기준 영역으로는 못 미치는데 찾은 자리로는 99% 이상):", [f"{r['사례']} {r['기어']}" for r in better])
 
 
 if __name__ == "__main__":

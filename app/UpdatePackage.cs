@@ -3,10 +3,10 @@ using System.Security.Cryptography;
 using System.Text.Json;
 namespace LadderRecords;
 
-// 자동 업데이트: 배포 파일(ZIP)을 내려받고, 온전한지 견주고, 풀어서 내용이 맞는지 확인하는 부분 (기획서 3절·6절).
+// 자동 업데이트: 배포 파일(ZIP)을 내려받고, 크기와 SHA-256 을 릴리즈에 적힌 값과 견주고, 풀어서 내용이 프로그램 파일 목록과 맞는지 확인하는 부분 (기획서 3절·6절).
 // 여기까지는 지금의 프로그램과 기록을 건드리지 않는다. 쓰는 곳은 프로그램 폴더의 update\ 아래뿐이다.
 
-/// <summary>사용자에게 그대로 보여 줄 까닭이 든 실패.</summary>
+/// <summary>업데이트 실패를 알리는 예외. Message 는 사용자에게 그대로 보여 줄 실패 사유다.</summary>
 class UpdateException(string message):Exception(message);
 
 record ManifestFile(string Path,long Size,string Sha256);

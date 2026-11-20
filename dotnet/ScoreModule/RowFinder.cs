@@ -1,21 +1,21 @@
-// 숫자 줄 탐지. 화면 아래쪽 띠를 보고 "점수 숫자 줄이 여기 있다"는 네모들을 낸다. Python 의 locate_model.find_rows 와 같다.
+// 숫자 줄 탐지. 화면 아래쪽 띠를 보고 "점수 숫자 줄이 여기 있다"는 검출 영역(Box)들을 낸다. Python 의 locate_model.find_rows 와 같다.
 //
 //   입력: 띠 그림(BGR). 모델에는 RGB 0~1 로 넣는다. 좌표를 입력으로 받지 않고, 기어를 가리지 않는다.
 //   출력: 4화소마다 한 칸, 칸마다 [숫자 줄 안인가(로짓), 왼쪽·위·오른쪽·아래 가장자리까지의 거리 ÷ 64].
-//   뒤처리: 0.5 이상인 칸을 여덟 방향으로 이어 덩어리로 묶고, 덩어리마다 칸들이 가리키는 네모의 가운데 값을 낸다. 점수가 높은 순서.
+//   뒤처리: 0.5 이상인 칸을 여덟 방향으로 이어 덩어리로 묶고, 덩어리마다 칸들이 가리키는 사각형의 가운데 값을 검출 영역으로 낸다. 점수가 높은 순서.
 using Microsoft.ML.OnnxRuntime;
 using Microsoft.ML.OnnxRuntime.Tensors;
 
 namespace DjmaxScore;
 
-/// <summary>네모(화소). 어느 좌표계인지는 쓰는 쪽이 정한다(띠 좌표 또는 화면 전체 좌표).</summary>
+/// <summary>사각형(화소). 검출 영역과 읽는 영역에 함께 쓴다. 어느 좌표계인지는 쓰는 쪽이 정한다(띠 좌표 또는 화면 전체 좌표).</summary>
 public readonly record struct Box(double X0, double Y0, double X1, double Y1)
 {
     public double Width => X1 - X0;
     public double Height => Y1 - Y0;
     public Box Shift(double dx, double dy) => new(X0 + dx, Y0 + dy, X1 + dx, Y1 + dy);
 
-    /// <summary>이 네모의 가운데가 zone 안에 있는가. zone 의 오른쪽·아래 끝은 넣지 않는다.</summary>
+    /// <summary>이 사각형의 가운데가 zone 안에 있는가. zone 의 오른쪽·아래 끝은 넣지 않는다.</summary>
     public bool CenterIn(Box zone)
     {
         double x = (X0 + X1) / 2, y = (Y0 + Y1) / 2;
@@ -59,7 +59,7 @@ public sealed class RowFinder : IDisposable
 
     public void Dispose() => _session.Dispose();
 
-    /// <summary>띠 그림(BGR, 높이 h, 너비 w) → (네모(띠 좌표), 점수) 목록. 점수가 높은 순서.</summary>
+    /// <summary>띠 그림(BGR, 높이 h, 너비 w) → (검출 영역(띠 좌표), 점수) 목록. 점수가 높은 순서.</summary>
     public List<(Box Box, double Score)> Find(ReadOnlySpan<byte> bgr, int height, int width, float threshold = 0.5f)
     {
         int plane = height * width;

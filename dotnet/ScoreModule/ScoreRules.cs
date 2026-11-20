@@ -10,7 +10,7 @@ namespace DjmaxScore;
 public static class ScoreRules
 {
     public const int MaxScore = 1_000_000;
-    private const int BreakHeal = 3;      // 설명되지 않는 걸음: 한쪽에서 값을 이만큼까지 버려 이어 붙일 수 있으면 오독으로 보고 버린다
+    private const int BreakHeal = 3;      // 이웃한 두 값의 증가폭이 점수 규칙을 벗어난 구간: 한쪽에서 값을 이만큼까지 버려 앞뒤가 규칙대로 이어지면 그 값들을 오독으로 보고 버린다
 
     /// <summary>score 가 규칙으로 만들어질 수 있으면 판정 누적 합 m(1% 단위), 아니면 null.</summary>
     public static long? LatticeM(long score, long notes)
@@ -104,10 +104,10 @@ public static class ScoreRules
     /// 시간 순서로 늘어선 판독값(-1 = 못 읽음) 중 규칙을 모두 통과한 것을 true 로 표시한다.
     /// 1) 산식 격자 위  2) 시간 순서대로 줄지 않음  3) 이웃 값과의 증가폭이 판정 합으로 설명됨.
     /// 통과하지 못한 값은 버릴 뿐, 다른 값으로 바꾸지 않는다.
-    /// tolerant(등록 판단의 검산 근거에만 쓴다. 사용자 결정 2026-11-14): 증가폭이 설명되지 않는 걸음을 만났는데 어느 한 값을 빼도 풀리지 않을 때,
-    /// 한쪽에서 값을 BreakHeal 개까지 버려 이어 붙일 수 있으면 그 값들을 오독으로 보고 버리고, 그래도 안 풀리면 그 걸음을 "끊긴 자리"로 받아들여
+    /// tolerant(등록 판단의 검산 근거에만 쓴다. 2026-11-14 에 정함): 이웃한 두 값의 증가폭이 점수 규칙을 벗어났는데 둘 중 어느 한 값을 빼도 규칙에 맞지 않을 때,
+    /// 한쪽에서 값을 BreakHeal 개까지 버려 앞뒤가 규칙대로 이어지면 그 값들을 오독으로 보고 버리고, 그래도 맞지 않으면 그 구간을 "끊긴 자리"로 받아들여
     /// 양쪽을 모두 둔다(받아들이는 수에 상한은 없다: 맥스 판정으로 플레이하면 1% 판정이 자주 나온다). 0.2초마다 뽑은 값 사이에는 1% 판정이 세 번 이상 몰릴 수 있고(Boom!),
-    /// tolerant 가 아니면 그런 걸음 하나 때문에 곡의 절반이 버려진다. 노트 수를 고를 때(RefineNotes)에는 쓰지 않는다: 거기서는 그 "크게 버려짐"이 신호다.
+    /// tolerant 가 아니면 그런 구간 하나 때문에 곡의 절반이 버려진다. 노트 수를 고를 때(RefineNotes)에는 쓰지 않는다: 거기서는 그 "크게 버려짐"이 신호다.
     /// </summary>
     public static bool[] VerifySequence(IReadOnlyList<int> values, int notes, bool tolerant = false)
     {
@@ -146,7 +146,7 @@ public static class ScoreRules
                 int[] after = right > 0 ? vals[bad..Math.Min(vals.Length, bad + right)] : Array.Empty<int>();
                 int[] before = left > 0 ? vals[Math.Max(0, bad - left)..bad] : Array.Empty<int>();
                 bool dropAfter = left == 0
-                    || (right > 0 && (after.Length, after.Sum(x => support[x])).CompareTo((before.Length, before.Sum(x => support[x]))) <= 0);   // 더 적게, 같으면 받친 수가 적은 쪽, 그것도 같으면 뒤쪽
+                    || (right > 0 && (after.Length, after.Sum(x => support[x])).CompareTo((before.Length, before.Sum(x => support[x]))) <= 0);   // 버릴 값이 적은 쪽, 같으면 그 값들이 읽힌 횟수(support)가 적은 쪽, 그것도 같으면 뒤쪽
                 foreach (int x in dropAfter ? after : before) dropped.Add(x);
             }
             else if (support[va] < support[vb]) dropped.Add(va);

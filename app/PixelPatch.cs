@@ -2,8 +2,8 @@ using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 namespace LadderRecords;
 
-// 그림의 화소를 한꺼번에 읽는다. Bitmap.GetPixel·SetPixel 은 부를 때마다 그림을 잠갔다 푼다.
-// RATE 를 읽을 때마다(0.1초) 그것을 1만 번 가까이 불러 코어 하나의 3% 쯤을 썼다(잰 값. docs\기록\최적화.md).
+// 그림의 한 영역을 LockBits 로 한 번에 읽어 둔다. Bitmap.GetPixel·SetPixel 은 부를 때마다 그림을 잠갔다 푼다.
+// RATE 를 읽을 때마다(0.1초) GetPixel 을 1만 번 가까이 불러 코어 하나의 3% 쯤을 썼다(잰 값. docs\기록\최적화.md).
 // 읽는 값은 GetPixel 과 같다(같은지는 실제 화면 그림으로 견줘 확인했다).
 sealed class PixelPatch
 {
@@ -21,7 +21,7 @@ sealed class PixelPatch
   finally{image.UnlockBits(locked);}
  }
 
- /// <summary>그 자리 화소의 R+G+B. 읽어 둔 범위 안의 자리만 물어야 한다.</summary>
+ /// <summary>(x,y) 화소의 R+G+B. 읽어 둔 범위 안의 좌표만 넘겨야 한다(범위 밖은 확인하지 않는다).</summary>
  public int Sum(int x,int y)
  {
   int i=((Math.Clamp(y,0,imageHeight-1)-top)*width+Math.Clamp(x,0,imageWidth-1)-left)*4;

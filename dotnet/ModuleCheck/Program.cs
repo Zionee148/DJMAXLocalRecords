@@ -1,6 +1,7 @@
 // .NET 으로 옮긴 점수 규칙과 등록 판단이 Python 과 같은 답을 내는지 확인한다.
 //
-// Python(detector.export_judge)이 내보낸 프레임별 판독을 같은 상황(키 시각, 앱을 켠 시각, 캡처 간격)으로 흘려 넣고,
+// Python(detector.export_judge)은 프레임별 판독(reads.bin)과 시나리오(키 시각, 앱을 켠 시각, 캡처 간격)별 등록 판정 결과(expected.tsv)를 저장한다.
+// 이 도구는 같은 판독을 같은 시나리오로 .NET 모듈(PlayLog, RegistrationJudge)에 전달해,
 // 상태·사유·점수·후보·걸린 시간·노트 수·통과한 값의 수·통과 비율·마지막 플레이 값·캡처 수를 줄마다 견준다.
 //
 // 실행: dotnet run -c Release -- <data\parity_judge 폴더>

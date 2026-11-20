@@ -28,7 +28,7 @@ static class UiChecks
   // 미리보기 고르기: 항목을 이름으로 고르면 미리보기가 그 상태로 바뀌어야 한다. 항목 이름은 지금 디자인 설정 창의 것이다(창에 없는 이름이면 여기서 실패한다).
   void PreviewMode(string item,string name){var dialog=new StyleDialog(initial,catalog,true);var mode=dialog.Controls.OfType<FlowLayoutPanel>().SelectMany(p=>p.Controls.OfType<FlowLayoutPanel>()).SelectMany(p=>p.Controls.OfType<ComboBox>()).Single(c=>c.Items.Contains(item));mode.SelectedItem=item;if((string?)mode.SelectedItem!=item||dialog.Controls.OfType<FlowLayoutPanel>().SelectMany(p=>p.Controls.OfType<StylePreview>()).Single().Mode!=mode.SelectedIndex)throw new Exception("Preview mode not applied: "+item);Snapshot(dialog,name);}
   PreviewMode("등록 확인","pending-style-preview");PreviewMode("첫 기록 등록","first-record-style-preview");
-  // 그림은 앱이 실제로 쓰는 모양(ConfirmView)의 확인 창으로 찍는다.
+  // 화면 캡처는 앱이 실제로 쓰는 자료형(ConfirmView)으로 만든 확인 창에서 찍는다.
   Snapshot(new Confirmation(new ConfirmView("La Campanella : Nu Rave","4B","SC","하드판정","99.48%","994,812","99.25%","992,507","good")),"confirmation-preview");
   Confirmations(catalog);Notices();
   string optionFile=Path.Combine(AppContext.BaseDirectory,"test-data",Guid.NewGuid()+".preferences.json");Directory.CreateDirectory(Path.GetDirectoryName(optionFile)!);
@@ -46,27 +46,27 @@ static class UiChecks
   IntPtr confirmHandle=passive.Handle,frontShown=GetForegroundWindow(),activeShown=GetActiveWindow();
   typeof(MainForm).GetMethod("Decide",BindingFlags.NonPublic|BindingFlags.Instance)!.Invoke(app,new object[]{false});if(session.Pending!=null||session.Locked==null)throw new Exception("Cancel lost locked chart");
   Application.DoEvents();IntPtr frontCancelled=GetForegroundWindow(),activeCancelled=GetActiveWindow();
-  // 포커스(확인 창이 뜨고 닫힐 때 앞에 있던 창이 그대로인가)는 통과 조건에서 떼어, 잰 값만 결과 파일에 적는다. 전에는 위의 조건과 한데 묶인 실패 조건이었다.
-  // 지금은 확인 창이 뜨면서 이 프로세스의 활성 창이 된다(리뷰 20261115-전체변경-UI포함-종합리뷰 4번. 사용자가 수정을 보류했다). 고쳐지면 다시 실패 조건으로 돌린다.
+  // 포커스(확인 창이 뜨고 닫힐 때 앞에 있던 창이 그대로인가)는 측정값만 결과 파일에 적고, 검사 통과 여부에는 반영하지 않는다.
+  // 지금은 확인 창이 뜨면서 이 프로세스의 활성 창이 된다(리뷰 20261115-전체변경-UI포함-종합리뷰 4번. 아직 고치지 않은 동작이다). 고쳐지면 실패 조건으로 되돌린다.
   // 시스템의 앞 창은 이 프로세스가 앞에 있을 때만 시험 창이 된다(뒤에서 돌리면 Windows 가 앞으로 나오게 두지 않는다). 그때는 앞 창이 바뀌지 않아도 포커스를 지켰다는 뜻이 아니므로, 이 프로세스 안의 활성 창도 함께 잰다.
   string Who(IntPtr h)=>(h==IntPtr.Zero?"없음":h==game.Handle?"시험 창":h==confirmHandle?"확인 창":h==app.Handle?"주 화면":"다른 창")+$"({h})";
   bool activeKept=activeShown==active,frontKept=frontShown==foreground&&frontCancelled==foreground,frontOurs=foreground==game.Handle;
-  string focus="포커스 보존(창 모드 등록 확인 창): "+(!activeKept||!frontKept?"확인되지 않음(확인 창이 뜨면서 앞에 있던 창이 바뀜)":frontOurs?"이번 실행에서는 앞에 있던 창이 유지됨":"확인되지 않음(시험 창이 시스템의 앞 창이 되지 못함)")+". 통과 조건이 아니라 잰 값이다. 리뷰 20261115 종합리뷰 4번, 사용자가 수정을 보류."
+  string focus="포커스 보존(창 모드 등록 확인 창): "+(!activeKept||!frontKept?"확인되지 않음(확인 창이 뜨면서 앞에 있던 창이 바뀜)":frontOurs?"이번 실행에서는 앞에 있던 창이 유지됨":"확인되지 않음(시험 창이 시스템의 앞 창이 되지 못함)")+". 이 측정값은 참고용이며 검사 통과 여부에 영향을 주지 않는다."
    +$"\n  이 프로세스의 활성 창: 뜨기 전 {Who(active)} → 확인 창이 뜬 뒤 {Who(activeShown)} → 취소한 뒤 {Who(activeCancelled)}. 유지됨: {(activeKept?"예":"아니오")}"
    +$"\n  시스템의 앞 창: 뜨기 전 {Who(foreground)} → 확인 창이 뜬 뒤 {Who(frontShown)} → 취소한 뒤 {Who(frontCancelled)}. 유지됨: {(frontKept?"예":"아니오")}. 시험 창이 앞 창이었는가: {(frontOurs?"예":"아니오(이 줄로는 같은 프로세스의 앞 창을 가져가는지 알 수 없다)")}";
-  // 전체화면 사용: 창을 만들지 않으므로 앞 창이 바뀔 일이 없다. 이것은 실패 조건으로 둔다. 위에서 확인 창이 앞 창을 가져갔다가 닫혔을 수 있어 앞 창을 다시 잡아 둔다.
+  // 전체화면 사용: 창을 만들지 않으므로 앞 창이 바뀔 일이 없다. 이것은 실패 조건으로 둔다. 위에서 확인 창이 앞 창을 가져갔다가 닫혔을 수 있어 시험 창을 다시 활성화하고 앞 창을 다시 읽어 둔다.
   game.Activate();Application.DoEvents();foreground=GetForegroundWindow();
   var fullscreen=(CheckBox)typeof(MainForm).GetField("fullscreen",BindingFlags.NonPublic|BindingFlags.Instance)!.GetValue(app)!;fullscreen.Checked=true;if(!UserOptions.Load(optionFile).Fullscreen)throw new Exception("Fullscreen setting not saved");
   foreach(bool byHotkey in new[]{true,false}){session.Current=99.48m;typeof(MainForm).GetMethod("ShowRegistration",BindingFlags.NonPublic|BindingFlags.Instance)!.Invoke(app,new object[]{byHotkey});Application.DoEvents();if(Application.OpenForms.Count!=forms||GetForegroundWindow()!=foreground||session.Pending?.Accuracy!=99.48m)throw new Exception("Fullscreen registration created a window, stole focus or lost snapshot");typeof(MainForm).GetMethod("Decide",BindingFlags.NonPublic|BindingFlags.Instance)!.Invoke(app,new object[]{false});}
   using(var reopened=new MainForm(catalog,18767,false,optionFile)){var restored=(CheckBox)typeof(MainForm).GetField("fullscreen",BindingFlags.NonPublic|BindingFlags.Instance)!.GetValue(reopened)!;if(!restored.Checked)throw new Exception("Fullscreen setting not restored");}
   var preview=(PictureBox)typeof(MainForm).GetField("picture",BindingFlags.NonPublic|BindingFlags.Instance)!.GetValue(app)!;var root=(ScrollableControl)app.Controls[0];bool PreviewEnabled()=>(bool)typeof(MainForm).GetMethod("ShouldUpdatePreview",BindingFlags.NonPublic|BindingFlags.Instance)!.Invoke(app,null)!;root.ScrollControlIntoView(preview);Application.DoEvents();if(!PreviewEnabled())throw new Exception("Visible preview suppressed");app.WindowState=FormWindowState.Minimized;if(PreviewEnabled())throw new Exception("Minimized preview still updating");app.WindowState=FormWindowState.Normal;app.Hide();if(PreviewEnabled())throw new Exception("Hidden preview still updating");app.Show();app.MinimumSize=Size.Empty;app.ClientSize=new(480,200);root.AutoScrollPosition=Point.Empty;Application.DoEvents();if(PreviewEnabled())throw new Exception("Offscreen preview still updating");app.ClientSize=new(720,900);root.ScrollControlIntoView(preview);Application.DoEvents();if(!PreviewEnabled())throw new Exception("Preview did not resume after scrolling into view");
   fullscreen.Checked=false;if(UserOptions.Load(optionFile).Fullscreen)throw new Exception("Unchecked setting not saved");
-  // 여기까지 왔으면 위의 실패 조건은 모두 지나온 것이다. 실제로 본 것만 적는다(포커스는 통과로 적지 않고 잰 값을 따로 적는다).
+  // 여기에 도달했다면 위의 실패 조건에 하나도 걸리지 않은 것이다. 실제로 확인한 항목만 적는다(포커스는 통과로 적지 않고 측정값을 따로 적는다).
   File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"ui-validation.txt"),
    "PASS: 단축키 목록 옮기기(4개·6개 → 5개, 중복 거절); 단축키·디자인·등록 확인 창의 그림과 창 아이콘; 디자인 설정(크기 값마다 12~64 슬라이더 하나, 문구 크기를 바꿔도 오버레이 높이가 그대로, 미리보기 \"등록 확인\"·\"첫 기록 등록\" 고르기); "
    +"창 모드 등록(확인 창이 하나 뜨고 후보 99.48%를 유지, 취소하면 곡 고정이 남음); 전체화면 사용(두 번의 등록에 창을 만들지 않고 앞 창과 후보가 그대로, 설정이 저장되고 새 주 화면에서 복원); 게임 화면 미리 보기의 갱신 판단(보임·최소화·숨김·화면 밖·다시 보임)."
-   +"\n함께 돈 검사(결과는 각 파일): 기록 목록 records-validation.txt, 목록 설정 records-settings-validation.txt, 수동 기록 manual-validation.txt, 실제 등록 확인 창의 단추·닫기·갱신 confirmation-validation.txt, 새로 감지하기 rescan-validation.txt."
-   +"\n보지 않은 것: 등록 키부터 SCORE 답까지, 전역 단축키, 실제 게임, 다른 프로세스가 앞에 있을 때의 포커스."
+   +"\n함께 실행한 검사(결과는 각 파일): 기록 목록 records-validation.txt, 목록 설정 records-settings-validation.txt, 수동 기록 manual-validation.txt, 실제 등록 확인 창의 단추·닫기·갱신 confirmation-validation.txt, 새로 감지하기 rescan-validation.txt."
+   +"\n검사 범위 밖의 항목: 등록 키 입력부터 SCORE 모듈의 답까지, 전역 단축키, 실제 게임, 다른 프로세스가 앞에 있을 때의 포커스."
    +"\n"+focus+"\n");
  }
 
@@ -74,8 +74,8 @@ static class UiChecks
  //
  // "전체화면 사용"을 끈 주 화면에 SCORE 모듈의 답(Accepted)을 만들어 넣는다. 그러면 앱이 답을 받았을 때의 코드(OnScoreAnswer → session.Begin → ShowPendingConfirmation)가
  // 확인 창을 실제로 띄운다. 그 창의 "예"·"아니요" 단추와 창의 X(닫기)를 누르고, 확인을 기다리는 동안 기존 기록을 바꿔 열린 창의 글이 따라 바뀌는지 본다.
- // 만든 시험이다: 후보와 기록은 만든 것이고, 기록은 test-data 아래의 임시 파일에 쓴다(주 화면의 store 를 바꿔 끼운다). Steam 곡 정보는 "곡 없음"으로 바꿔 끼워 게임 화면을 캡처하지 않는다.
- // 등록 키부터 답까지(RequestRegistration, SCORE 판독), 전역 단축키, 실제 게임은 지나가지 않는다. 확인 창이 포커스를 가져가는지도 여기서 보지 않는다(Run 이 잰다).
+ // 합성 자료로 하는 시험이다: 후보와 기록은 검사가 만든 값이고, 기록은 test-data 아래의 임시 파일에 쓴다(주 화면의 store 를 임시 저장소로 교체한다). Steam 곡 정보는 "곡 없음"을 돌려주게 재정의해 게임 화면을 캡처하지 않는다.
+ // 등록 키 입력부터 답까지(RequestRegistration, SCORE 판독), 전역 단축키, 실제 게임은 이 검사의 범위 밖이다. 확인 창이 포커스를 가져가는지도 여기서 확인하지 않는다(Run 이 측정한다).
  sealed class Quiet(Catalog catalog,int port,string preferences):MainForm(catalog,port,false,preferences){protected override SteamSnapshot ReadSteamSnapshot()=>new(true,null,"확인 창 검사");}
  static IEnumerable<Control> Inside(Control parent)=>parent.Controls.Cast<Control>().SelectMany(c=>new[]{c}.Concat(Inside(c)));
  // 프로그램이 그리는 알림 창(NoticeDialog): 긴 글이 정한 폭 안에서 줄을 바꾸고, "확인"·닫기로 닫히고, 라이트·다크 그림을 남긴다.
@@ -106,7 +106,7 @@ static class UiChecks
     notice.Close();
    }
    Theme.Dark=dark;
-   // 실제로 띄우는 길(ShowDialog): 확인을 누르면 닫히고, 닫기(X)로도 닫힌다. 주인 창은 이 검사가 띄운 창이다
+   // 실제로 띄우는 경로(ShowDialog): 확인을 누르면 닫히고, 닫기(X)로도 닫힌다. 소유자 창(Owner)은 이 검사가 띄운 창이다
    using var owner=new AppWindow(){Text="Notice owner",Width=420,Height=240};owner.Show();Application.DoEvents();
    foreach(bool byButton in new[]{true,false}){
     using var timer=new System.Windows.Forms.Timer(){Interval=150};bool seen=false;

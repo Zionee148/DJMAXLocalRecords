@@ -1,10 +1,10 @@
 {
- "about": "동명곡을 가리는 소리 기준(app/runtime/data/audio/<SourceId>.bin)의 원본 녹화와 쓰는 구간. tools/build_audio_references.py 가 읽는다. 기록: docs/기록/동명곡-소리기준.md",
+ "about": "동명곡 식별용 음향 기준(app/runtime/data/audio/<SourceId>.bin)을 만드는 원본 녹화와 사용 구간. tools/build_audio_references.py 가 읽는다. 기록: docs/기록/동명곡-소리기준.md",
  "track": 0,
- "track_note": "녹화마다 오디오 트랙이 여섯이다. 첫째(스트림 1)와 둘째가 같은 소리이고 셋째~여섯째는 무음이다. 첫째를 쓴다.",
+ "track_note": "track 은 0부터 세는 오디오 트랙 번호다. 녹화마다 오디오 트랙이 여섯 개 있다. 첫째(스트림 1)와 둘째는 같은 소리이고 셋째~여섯째는 무음이다. 첫째를 쓴다.",
  "lead_seconds": 5.0,
  "tail_seconds": 1.0,
- "interval_note": "song 은 플레이 중에 곡의 소리가 나는 구간(원본의 시각, 초)이다. 기준에는 그 앞 lead_seconds 초(로딩 뒤의 무음)와 뒤 tail_seconds 초를 붙여 쓴다. 선곡 화면의 미리 듣기와 결과 화면의 소리는 넣지 않는다.",
+ "interval_note": "song 은 플레이 중에 곡의 소리가 나는 구간(원본 녹화의 재생 시각, 초)이다. 음향 기준에는 그 앞 lead_seconds 초(로딩 뒤의 무음)와 뒤 tail_seconds 초를 포함한다. 선곡 화면의 미리 듣기와 결과 화면의 소리는 넣지 않는다.",
  "pairs": [[2, 441], [329, 819], [319, 777], [320, 538], [213, 729], [170, 267], [369, 459]],
  "sources": [
   {"source_id": 2, "name": "Alone", "artist": "Marshmello", "file": "Alone_Marshmello.mkv", "song": [11.49, 210.92], "played": true},
@@ -22,5 +22,5 @@
   {"source_id": 369, "name": "Voyage", "artist": "makou", "file": "Voyage_makou.mkv", "song": [10.52, 111.53], "played": false},
   {"source_id": 459, "name": "Voyage", "artist": "SOPHI", "file": "Voyage_SOPHI.mkv", "song": [10.28, 156.90], "played": false}
  ],
- "played_note": "played 가 false 인 녹화는 노트를 치지 않고 흘려보낸 것이다(화면의 RATE 가 0.00%, 판정이 BREAK). 곡의 소리는 끝까지 이어진다."
+ "played_note": "played 가 false 인 녹화는 노트를 치지 않고 곡을 끝까지 진행한 것이다(화면의 RATE 가 0.00%, 판정이 BREAK). 곡의 소리는 끝까지 이어진다."
 }

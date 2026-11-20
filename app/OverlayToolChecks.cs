@@ -5,7 +5,7 @@ using DjmaxScore;
 namespace LadderRecords;
 // 오버레이를 상태별로 띄워 보는 도구(2026-11-16 에 다시 만들었다. 전에는 5분 동안 서버만 열어 두고 overlay-fixture.json 을 읽어 보여 주었다. 끝내는 방법이 없었다).
 //
-// 화면에 보이지 않는 주 화면 하나를 만들어 실제 상태로 몰아넣는다(감지 중, 곡 고정, 분석 중, 분석 실패, 저장 확인 대기, 등록 결과 셋).
+// 화면에 보이지 않는 주 화면 하나를 만들어 각 오버레이 상태를 재현한다(감지 중, 곡 고정, 분석 중, 분석 실패, 저장 확인 대기, 등록 결과 셋).
 // 오버레이가 받는 상태(/state)는 그 주 화면이 평소처럼 만든 것이다. 표본 JSON 을 따로 손으로 만들지 않는다.
 //
 //   --overlay-check          사람용 도구. 작은 창의 단추로 상태를 고르고, 브라우저나 OBS 에서 http://127.0.0.1:18766/ 을 보며 창에 적힌 "볼 것"과 견준다.
@@ -98,8 +98,8 @@ static class OverlayToolChecks
     "짧은 실패 사유가 3초쯤 보였다가 사라진다(고른 뒤 3초 안에 본다).",
     e=>Want(e,(P("analysis","stage"),"failure"))??(string.IsNullOrEmpty(S(e,"analysis","reason"))?"analysis.reason 이 비어 있음":null)),
    new("저장 확인 대기 · 첫 기록",()=>{Base(null);Offer();},
-    // 오버레이의 저장 확인 화면은 세 줄이다: 물음, 등록할 SCORE 와 RATE, 등록·취소 키. 기존 기록은 이 화면에 나오지 않는다(프로그램의 확인 창에는 나온다).
-    // 전에는 여기에 "기존 기록 없음"이, 다음 상태에 "기존 기록 97.00%"가 보인다고 잘못 적었다(사용자의 직접 확인과 리뷰 20261116-오버레이직접확인-기존기록안내-추가리뷰)
+    // 오버레이의 저장 확인 화면은 세 줄이다: 확인 질문("등록하시겠습니까?"), 등록할 SCORE 와 RATE, 등록·취소 키. 기존 기록은 이 화면에 나오지 않는다(프로그램의 확인 창에는 나온다).
+    // 그래서 이 상태와 다음 상태의 "볼 것"에 기존 기록이 보인다고 적지 않는다(실제 화면 확인과 리뷰 20261116-오버레이직접확인-기존기록안내-추가리뷰)
     $"\"등록하시겠습니까?\", 등록할 기록 987,117 과 98.71%, \"등록 ({confirmKey}) / 취소 ({cancelKey})\"가 보인다. 기존 기록은 오버레이의 이 화면에 나오지 않는다.",
     e=>Want(e,(P("confirmation","score"),"987117"),(P("confirmation","accuracy"),"98.71"),(P("confirmation","previous"),null),(P("confirmation","song"),title),(P("confirmation","confirm"),confirmKey),(P("confirmation","cancel"),cancelKey),(P("analysis"),null))),
    new("저장 확인 대기 · 기존 기록 있음",()=>{Base(970000);Offer();},

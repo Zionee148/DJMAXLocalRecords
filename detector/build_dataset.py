@@ -1,9 +1,10 @@
 """학습·평가용 자료 만들기.
 
-Codex 가 뽑아 둔 0.5초 간격 프레임(읽기 전용)에서 사례마다 점수 영역을 잘라 한 파일로 묶는다.
+0.5초 간격의 기준 프레임(testdata\\ladder-records 의 PNG. 읽기 전용)에서 사례마다 점수 영역을 잘라 한 파일로 묶는다.
   - 플레이 프레임(f*.png)과 등록 키 이후 프레임(r*.png, 0.2초 간격)을 함께 담는다.
-  - 점수 영역 위치는 Codex 인식기가 찾은 결과를 쓴다 (시제품 단계의 임시 의존. 위치 찾기는 나중에 따로 만든다).
-출력: data\\frames05\\<사례>.npz, data\\frames05\\cases.json
+  - 점수 영역 위치는 검사 설정의 사례별 결과(all270-results\\<사례>.json 의 area)에 적힌 것을 쓴다. 이전 인식기가 찾아 둔 영역이며,
+    다른 도구들이 비교 기준으로 사용한다(기준 영역). 영역이 없는 사례는 담지 않는다.
+출력: data\\frames05b\\<사례>.npz, data\\frames05b\\cases.json
 실행: .venv\\Scripts\\python.exe -m detector.build_dataset
 """
 import ctypes
@@ -19,12 +20,12 @@ import numpy as np
 from . import inputs
 
 ROOT = Path(__file__).resolve().parents[1]
-# 이 PC 에만 있는 폴더의 자리를 적어 두는 파일. git 에 넣지 않는다(.gitignore)
+# 원본 영상 폴더 같은 로컬 경로를 적어 두는 설정 파일. git 에 넣지 않는다(.gitignore)
 LOCAL = ROOT / "local-paths.json"
 
 
 def local_path(key: str, env: str):
-    """이 PC 에만 있는 폴더의 자리: 환경 변수, 없으면 local-paths.json 의 값. 어디에도 없으면 None.
+    """로컬 폴더의 경로를 돌려준다: 환경 변수, 없으면 local-paths.json 의 값. 어디에도 없으면 None.
 
     같은 것이 tools\\make_bundle.py 에도 있다(이쪽은 tools 를 불러오지 않는다)."""
     value = os.environ.get(env)

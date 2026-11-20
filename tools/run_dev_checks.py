@@ -16,16 +16,16 @@
        overlay-states       오버레이 상태 검사         --overlay-check smoke              제한 60초 (평소 5초쯤)
        store-optimization   저장 최적화 검사           --store-optimization-check         제한 60초 (평소 2초쯤)
        release-feature      가져오기 등 기능 검사      --release-feature-check <표본>     제한 60초 (평소 2초쯤)
-     제한 시간은 평소 걸리는 시간의 몇 배로 넉넉히 잡았다. 넘으면 멈춘 것으로 보고 끝낸다.
+     제한 시간은 평소 걸리는 시간의 몇 배로 넉넉히 잡았다. 넘으면 응답이 없는 것으로 보고 그 검사를 끝낸다.
   4. 결과를 넷으로 가른다.
        통과       종료 코드 0 이고 결과 파일이 통과라고 적었다
-       실패       검사가 틀린 것을 찾았다(종료 코드가 0 이 아니거나 결과 파일이 통과가 아니다)
+       실패       검사가 실패했다(종료 코드가 0 이 아니거나, 결과 파일이 없거나, 결과 파일이 통과가 아니다. 어느 경우인지는 요약의 '까닭' 열에 적는다)
        실행 불가  자료나 환경이 없어 검사를 돌리지 못했다(검사가 CheckUnavailableException 을 냈다)
        시간 초과  제한 시간 안에 끝나지 않았다
      통과가 아닌 것이 하나라도 있으면 종료 코드 1 로 끝난다. 실행 불가와 시간 초과는 통과가 아니다.
   5. data\\devchecks\\<결과 이름>\\summary.tsv 와 summary.json 을 쓴다. 검사마다 남긴 결과 파일은 app 폴더에 그대로 있다.
      summary.json 에는 돌린 때와 그때 저장소의 커밋(커밋하지 않은 변경이 있었는지 포함), 빌드 폴더와 그 실행 파일이 만들어진 때를 적는다.
-     참고값이다: 커밋은 빌드를 만든 커밋이 아니라 돌린 때 저장소의 커밋이고, 변경의 수는 이미 관리되는 파일만 센다(새로 만든 파일은 세지 않는다).
+     참고값이다: 커밋은 빌드를 만든 커밋이 아니라 돌린 때 저장소의 커밋이고, 변경의 수는 git 이 추적하는 파일만 센다(새로 만든 파일은 세지 않는다).
      빌드한 뒤 곧바로 돌렸을 때만 그 폴더의 코드를 가리킨다고 볼 수 있다.
      시험 폴더는 그때의 빌드를 복사한 것이다. 코드를 고친 뒤에는 다시 빌드해 새 결과 이름으로 돌린다(앞의 폴더가 새 코드로 바뀌지 않는다).
 
@@ -92,7 +92,7 @@ def copy_build(build: Path, app: Path) -> int:
 
 
 def run(app: Path, args: list, limit: float):
-    """(가름, 종료 코드, 걸린 초, test-error.txt 의 첫 줄)"""
+    """검사 하나를 실행해 (결과 낱말, 종료 코드, 걸린 초, 사유)를 돌려준다. 사유는 test-error.txt 의 첫 줄에서 가져온다."""
     error = app / "test-error.txt"
     error.unlink(missing_ok=True)
     started = time.time()
@@ -113,7 +113,7 @@ def run(app: Path, args: list, limit: float):
 
 
 def result_says_pass(app: Path, name: str, how: str) -> str:
-    """결과 파일이 통과라고 적었으면 빈 글, 아니면 까닭"""
+    """결과 파일이 통과이면 빈 문자열을, 아니면 사유를 반환한다. 사유는 파일 없음, 읽기 실패, 통과가 아닌 값을 구분해 적는다."""
     path = app / name
     if not path.exists():
         return f"결과 파일({name})이 없음"

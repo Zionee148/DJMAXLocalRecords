@@ -101,7 +101,7 @@ static class UpdateChecker
   try{document=JsonDocument.Parse(json);}catch(JsonException){return new CheckFailed("릴리즈 목록을 읽지 못했습니다.");}
   using(document)
   {
-   if(document.RootElement.ValueKind!=JsonValueKind.Array)return new CheckFailed("릴리즈 목록의 모양이 예상과 다릅니다.");
+   if(document.RootElement.ValueKind!=JsonValueKind.Array)return new CheckFailed("GitHub에서 받은 릴리즈 목록의 형식을 읽을 수 없습니다.");
    Version? best=null;JsonElement chosen=default;
    foreach(var item in document.RootElement.EnumerateArray())
    {
@@ -120,7 +120,7 @@ static class UpdateChecker
    var asset=assets[0];
    string? digest=Text(asset,"digest"),download=Text(asset,"browser_download_url");
    if(digest==null||!digest.StartsWith("sha256:",StringComparison.Ordinal)||digest.Length!=71||!digest.AsSpan(7).ToString().All(Uri.IsHexDigit))
-    return new NoPackage(best,page,"파일이 온전한지 견줄 값(SHA-256)이 릴리즈에 없습니다.");
+    return new NoPackage(best,page,"릴리즈에서 유효한 SHA-256 해시를 확인할 수 없습니다.");
    if(!asset.TryGetProperty("size",out var sizeValue)||!sizeValue.TryGetInt64(out long size)||size<=0||size>MaxPackageBytes)
     return new NoPackage(best,page,"파일 크기가 릴리즈에 없거나 예상 범위를 벗어납니다.");
    if(download==null||!download.StartsWith(source.DownloadPrefix,StringComparison.Ordinal)||!Uri.TryCreate(download,UriKind.Absolute,out var address)

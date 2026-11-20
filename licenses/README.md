@@ -1,8 +1,8 @@
 # 외부 라이브러리의 라이선스와 고지문
 
-배포 ZIP에 함께 들어 있는 외부 라이브러리의 라이선스·고지문 원문입니다. 각 파일은 해당 패키지에 들어 있는 것을 고치지 않고 그대로 옮겼습니다.
+이 폴더에는 배포 ZIP에 포함된 외부 라이브러리의 라이선스와 고지문 원문을 모았습니다. 각 파일은 해당 패키지의 원문 그대로입니다.
 
-DJMAXLocalRecords의 자체 소스코드에 적용되는 MIT 라이선스는 저장소 최상위의 [LICENSE](../LICENSE)에 있습니다. 아래 라이브러리에는 그 라이선스가 아니라 각자의 조건이 적용됩니다. 전체 안내는 [라이선스·출처](https://github.com/Zionee148/DJMAXLocalRecords/blob/main/guide/license.md)에서 확인합니다.
+DJMAXLocalRecords의 자체 소스코드에 적용되는 MIT 라이선스는 저장소 최상위의 [LICENSE](../LICENSE)에 있습니다. 각 라이브러리의 라이선스와 고지문은 아래 표에서 확인할 수 있습니다. 전체 안내는 [라이선스·출처](https://github.com/Zionee148/DJMAXLocalRecords/blob/main/guide/license.md)에서 확인합니다.
 
 | 구성 요소 | 버전 | 조건 | 이 폴더의 원문 |
 | --- | --- | --- | --- |

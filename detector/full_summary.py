@@ -88,7 +88,7 @@ def main():
     only = sys.argv[2] if len(sys.argv) > 2 else "all"           # left-center 를 주면 RIGHT 사례는 요약에 넣지 않는다
     paths = [p for p in inputs(folder, "*.npz", "사례별 판독 결과") if only != "left-center" or "-right-" not in p.stem]
     rows = [summarize(p.stem, np.load(p), expected[p.stem]) for p in paths]
-    # 사용자 결정(2026-11-11): 숫자를 완전히 가린 프레임은 따로 세고 분모에서 뺀다. 분류는 classify_frames 가 남긴 것을 쓴다.
+    # 채점 기준(2026-11-11): 숫자가 완전히 가려진 프레임은 따로 세고 통과율의 분모(플레이 구간의 프레임 수)에서 뺀다. 분류는 classify_frames 가 남긴 것을 쓴다.
     for r in rows:
         r["완전히 가림(제외)"] = 0; r["제외 반영 통과율"] = r["규칙 통과율"]
         path = folder / "classes" / f"{r['사례']}.npz"

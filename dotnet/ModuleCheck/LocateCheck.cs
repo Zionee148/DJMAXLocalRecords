@@ -1,7 +1,7 @@
 // 위치 찾기(.NET 의 Locator)가 Python 과 같은 자리를 같은 때에 고정하는지 확인한다.
 //
 // Python(locate_video)과 똑같이 원본 녹화에서 화면 아래쪽 띠를 초당 10장으로 뽑아(ffmpeg), 구간 처음 45초를 차례로 넣는다.
-// 탐지 모델은 세 장에 한 번 돌린다. 고정 시각, 고정한 네모, 자세를 Python 이 남긴 결과(cases.tsv)와 견준다.
+// 탐지 모델은 세 장에 한 번 돌린다. 고정 시각, 고정한 영역, 자세를 Python 이 남긴 결과(cases.tsv)와 견준다.
 //
 // 실행: dotnet run -c Release -- locate <finder.onnx> <reader.onnx> <cases.tsv> [--workers N] [사례 이름에 들어 있는 글자 …]
 using System.Diagnostics;
@@ -149,7 +149,7 @@ public static class LocateCheck
                 Box mine = new Box(Math.Max(0.0, shifted.X0), shifted.Y0, Math.Min(1920.0, shifted.X1), shifted.Y1);
                 boxDiff = new[] { Math.Abs(mine.X0 - theirs.X0), Math.Abs(mine.Y0 - theirs.Y0), Math.Abs(mine.X1 - theirs.X1), Math.Abs(mine.Y1 - theirs.Y1) }.Max();
                 bool timeSame = Math.Abs(found.At - c.LockAt!.Value) < 1e-6, poseSame = found.Pose == c.Pose;
-                verdict = (timeSame && poseSame && boxDiff < 1.0 ? "같음" : "다름") + $": 고정 {found.At:F1}초 (Python {c.LockAt:F1}초), 네모 차이 {boxDiff:F2}화소" +
+                verdict = (timeSame && poseSame && boxDiff < 1.0 ? "같음" : "다름") + $": 고정 {found.At:F1}초 (Python {c.LockAt:F1}초), 영역 차이 {boxDiff:F2}화소" +
                           (found.Pose is null && c.Pose is null ? "" : $", 자세 {found.Pose?.Angle}/{found.Pose?.Center} (Python {c.Pose?.Angle}/{c.Pose?.Center})") + $", 노트 수 {found.Notes}" +
                           (boxDiff >= 1.0 ? $" | .NET [{mine.X0:F1}, {mine.Y0:F1}, {mine.X1:F1}, {mine.Y1:F1}] / Python [{theirs.X0:F1}, {theirs.Y0:F1}, {theirs.X1:F1}, {theirs.Y1:F1}]" : "");
             }
@@ -164,7 +164,7 @@ public static class LocateCheck
                 }
                 frameMs.AddRange(times); poseReads += locator.PoseReads; reads += locator.Reads; frameReads.AddRange(counts);
                 times.Sort();
-                rows[k] = $"{c.Id}\t{verdict}\t줄기 {locator.Tracks}\t판독 {locator.Reads}\t기울여 읽기 {locator.PoseReads}\t화면 {times.Count}장\t" +
+                rows[k] = $"{c.Id}\t{verdict}\t추적 후보 {locator.Tracks}\t판독 {locator.Reads}\t기울여 읽기 {locator.PoseReads}\t화면 {times.Count}장\t" +
                           $"가운데 {times[times.Count / 2]:F0} ms\t95% {times[(int)(times.Count * 0.95)]:F0} ms\t가장 긴 {times[^1]:F0} ms";
                 done++;
                 if (!verdict.StartsWith("같음") || cases.Count <= 12) Console.WriteLine($"[{done}/{cases.Count}] {c.Id}: {verdict}");
@@ -174,9 +174,9 @@ public static class LocateCheck
             return models;
         }, models => { models.Item1.Dispose(); models.Item2.Dispose(); });
         frameMs.Sort();
-        Console.WriteLine($"사례 {cases.Count}개: Python 과 같은 고정 {sameLock}개, 다른 것 {differLock}개 (고정 시각이 다른 것 {differTime}, 자세가 다른 것 {differPose}, 네모의 가장 큰 차이 {worstBox:F2}화소)");
+        Console.WriteLine($"사례 {cases.Count}개: Python 과 같은 고정 {sameLock}개, 다른 것 {differLock}개 (고정 시각이 다른 것 {differTime}, 자세가 다른 것 {differPose}, 영역의 가장 큰 차이 {worstBox:F2}화소)");
         if (frameMs.Count > 0)
-            Console.WriteLine($"화면 한 장 처리 시간(일꾼 {workers}개로 함께 돌릴 때): 가운데 {frameMs[frameMs.Count / 2]:F1} ms, 95% {frameMs[(int)(frameMs.Count * 0.95)]:F1} ms, 가장 긴 {frameMs[^1]:F1} ms " +
+            Console.WriteLine($"화면 한 장 처리 시간(작업자 {workers}개로 함께 돌릴 때): 가운데 {frameMs[frameMs.Count / 2]:F1} ms, 95% {frameMs[(int)(frameMs.Count * 0.95)]:F1} ms, 가장 긴 {frameMs[^1]:F1} ms " +
                               $"| 판독 {reads:N0}번 + 기울여 읽어 보기 {poseReads:N0}번, 전체 {watch.Elapsed.TotalSeconds:F0}초");
             Console.WriteLine($"   평균 {frameMs.Average():F1} ms, 99% {frameMs[(int)(frameMs.Count * 0.99)]:F1} ms, 100ms 를 넘은 화면 {frameMs.Count(v => v > 100)}장 / {frameMs.Count}장 ({100.0 * frameMs.Count(v => v > 100) / frameMs.Count:F2}%), 150ms 를 넘은 화면 {frameMs.Count(v => v > 150)}장");
         if (frameReads.Count > 0)

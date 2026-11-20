@@ -748,7 +748,7 @@ def scenario_download(run: Run) -> None:
         server.items = [release]
         run.offer(release["tag_name"]).click("업데이트")
         text = run.answer("업데이트 실패", "확인", word, 120, "app")
-        run.check("계속 사용합니다" in text and "바뀌지 않았습니다" in text, f"{what}: 까닭과 다음 행동을 알림", text[:300])
+        run.check("계속 사용합니다" in text and "바뀌지 않았습니다" in text, f"{what}: 원인과 다음 행동을 알림", text[:300])
         run.check(run.program() == before_program and run.user_data() == before_user and not run.backups(), f"{what}: 프로그램·개인 자료가 그대로이고 백업 폴더도 남지 않음")
         run.no_leftovers()
         run.check(run.main() is not None and run.main().enabled("업데이트 확인"), f"{what}: 프로그램을 계속 쓸 수 있음")
@@ -787,7 +787,7 @@ def swap_failure(run: Run, package: str, prepare, release_word: str, what: str) 
     run.offer().click("업데이트")
     notice = run.dialog("업데이트 실패", 240, "DJMAXLocalRecords", "기존 버전으로 되돌렸습니다")
     text = notice.texts()
-    run.check(release_word in text and "업데이트하기 전 그대로" in text, f"{what}: 기존 버전으로 되돌렸다고 까닭과 함께 알림", text[:400])
+    run.check(release_word in text and "업데이트하기 전 그대로" in text, f"{what}: 기존 버전으로 되돌렸다고 실패 원인과 함께 알림", text[:400])
     run.check(not pid_alive(old_pid), "그때 기존 프로그램은 이미 끝나 있었음(끝난 뒤에도 안내가 보임)")
     run.check(run.program() == before_program and run.user_data() == before_user and run.version() == OLD, f"{what}: 프로그램·개인 자료가 바꾸기 전과 똑같음")
     if held is not None:
@@ -801,7 +801,7 @@ def swap_failure(run: Run, package: str, prepare, release_word: str, what: str) 
 
 def scenario_swap_locked(run: Run) -> None:
     """교체 도중의 실패 ①: 다른 프로그램이 프로그램 파일을 잡고 있다."""
-    swap_failure(run, "good.zip", lambda: open(run.app / "overlay.html", "rb"), "까닭", "다른 프로그램이 잡은 파일")
+    swap_failure(run, "good.zip", lambda: open(run.app / "overlay.html", "rb"), "실패 원인", "다른 프로그램이 잡은 파일")
 
 
 def scenario_conflict(run: Run) -> None:
@@ -844,9 +844,9 @@ def scenario_conflict(run: Run) -> None:
 
 
 def scenario_cleanup(run: Run) -> None:
-    """지난 시도의 임시 파일을 다른 프로그램이 잡고 있어 시작할 때의 뒷정리가 끝나지 않는 사이에 업데이트한다.
+    """지난 시도의 임시 파일을 다른 프로그램이 잡고 있어 시작할 때 하는 지난 업데이트 파일의 정리가 끝나지 않는 사이에 업데이트한다.
 
-    뒷정리는 2초마다(40초까지) 같은 자리(update\\download, update\\staging)를 다시 지운다. 멈추지 않으면 새로 받은 것과 푼 것을 지워 업데이트가 실패한다.
+    이 정리는 2초마다(40초까지) 같은 자리(update\\download, update\\staging)를 다시 지운다. 멈추지 않으면 새로 받은 것과 푼 것을 지워 업데이트가 실패한다.
     """
     server = run.server
     server.items = [server.release(NEW, run.packages / "good.zip")]
@@ -859,7 +859,7 @@ def scenario_cleanup(run: Run) -> None:
         run.start()
         run.wait_main("새 버전")
         run.update(NEW)
-        run.check(stale.exists(), "잡혀 있던 지난 파일이 끝까지 남아 있었음(뒷정리가 끝나지 못하는 조건이었다)")
+        run.check(stale.exists(), "잡혀 있던 지난 파일이 끝까지 남아 있었음(지난 파일의 정리가 끝나지 못하는 조건이었다)")
         run.check(run.version() == NEW and run.user_data() == before_user, "그 사이에 한 업데이트가 끝까지 됨, 개인 자료 그대로")
     run.no_leftovers()
 

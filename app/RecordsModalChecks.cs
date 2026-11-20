@@ -4,11 +4,11 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 namespace LadderRecords;
 [System.Runtime.Versioning.SupportedOSPlatform("windows10.0.19041")]
-// 기록 목록 창을 주 화면에서 세 번 여닫으며 본다(감지가 도는 동안): 같은 창을 다시 쓰는가, 주 화면이 막히지 않는가, 미리 보기가 멈췄다가 돌아오는가,
-// 바뀐 기록이 목록에 반영되는가, 화면이 굳지 않는가(화면 스레드의 가장 긴 공백 750ms 이하, 닫기 500ms 이하), 감지가 화면 스레드 밖에서 계속 도는가.
+// 감지가 실행되는 동안 주 화면에서 기록 목록 창을 세 번 여닫으며 검사한다: 같은 창을 다시 쓰는가, 주 화면이 막히지 않는가, 미리 보기가 멈췄다가 돌아오는가,
+// 바뀐 기록이 목록에 반영되는가, 화면이 굳지 않는가(화면 스레드의 가장 긴 공백 750ms 이하, 닫기 500ms 이하), 감지가 화면 스레드 밖에서 계속 실행되는가.
 // 자료: 실행 파일 옆의 records.json 에 기록이 3,000개 넘게 있어야 한다(많은 기록에서의 응답을 보는 검사다). 합성 기록은 --dev-fixtures 가 만든다.
 // 실행: 새 시험 폴더에 복사한 Debug 빌드에서 DJMAXLocalRecords.exe --dev-fixtures 뒤에 --records-modal-check. 10초쯤 걸린다. 결과 records-modal-validation.json
-// 실제 게임 화면이 아니라 검은 그림에 RATE 글자를 그린 시험용 화면을 넣는다. 실제 캡처와 실제 인식은 보지 않는다.
+// 실제 게임 화면이 아니라 검은 그림에 RATE 글자를 그린 시험용 화면을 넣는다. 실제 캡처와 실제 인식은 검사 범위 밖이다.
 static class RecordsModalChecks
 {
  [DllImport("user32.dll")]static extern IntPtr SendMessage(IntPtr window,int message,IntPtr w,IntPtr l);
@@ -22,7 +22,7 @@ static class RecordsModalChecks
    for(int pass=0;pass<3;pass++){stage=$"{pass+1}번째 열기";if(pass==1){var row=RecordRows.Read(catalog,store.Active)[0];store.SetManual(row.Chart,row.Accuracy,123456);}if(pass==2)store.Undo();var openWatch=Stopwatch.StartNew();typeof(MainForm).GetMethod("BrowseRecords",flags)!.Invoke(main,null);var dialog=(RecordsDialog)typeof(MainForm).GetField("recordsDialog",flags)!.GetValue(main)!;opens.Add(openWatch.Elapsed.TotalMilliseconds);stage=$"{pass+1}번째 열린 동안";first??=dialog;sameInstance&=ReferenceEquals(first,dialog);if(!main.Enabled||!dialog.Visible)throw new Exception("Record window blocked the main form");var grid=(RecordsView)typeof(RecordsDialog).GetField("grid",flags)!.GetValue(dialog)!;visibleGrid=grid;count=grid.RowCount;var picture=(PictureBox)typeof(MainForm).GetField("picture",flags)!.GetValue(main)!;var before=picture.Image;using(var image=new Bitmap(10,10))typeof(MainForm).GetMethod("ShowImage",flags)!.Invoke(main,new object[]{image});previewSuppressed&=ReferenceEquals(before,picture.Image);if(pass==1)updated=Enumerable.Range(0,grid.RowCount).Any(i=>grid.ItemAt(i)!.PlayCount==123456);await Task.Delay(1400);stage=$"{pass+1}번째 닫기";var closeWatch=Stopwatch.StartNew();if(pass==0)((IButtonControl)dialog.CancelButton!).PerformClick();else if(pass==1)SendMessage(dialog.Handle,0x0112,new IntPtr(0xF060),IntPtr.Zero);else dialog.Close();await Task.Yield();closes.Add(closeWatch.Elapsed.TotalMilliseconds);if(dialog.Visible||dialog.IsDisposed||!main.Enabled)throw new Exception("Close failed to hide reusable record window");visibleGrid=null;stage=$"{pass+1}번째 닫은 뒤";await Task.Delay(400);}
    var pic=(PictureBox)typeof(MainForm).GetField("picture",flags)!.GetValue(main)!;if(pic.Image?.Size!=pic.ClientSize)throw new Exception("Preview did not resume at display size");var session=(Session)typeof(MainForm).GetField("session",flags)!.GetValue(main)!;if(main.Captures<2||!main.CaptureOffUi||!session.Running)throw new Exception("Background detection did not continue");}catch(Exception e){error=e;}finally{heart.Stop();main.Close();}};
   heart.Start();driver.Start();Application.Run(main);if(error!=null)throw error;
-  // 기준은 전과 같다. 어느 것이 어긋났는지 알 수 있게 나눠 적는다
+  // 어느 기준을 벗어났는지 알 수 있게 항목별로 나눠 적는다
   var wrong=new List<string>();bool listening=false;try{listening=UiaClientsAreListening();}catch{}
   if(count<3000)wrong.Add($"목록의 기록 {count}개(3,000개 이상이어야 함)");if(pulses<20)wrong.Add($"화면 스레드가 돈 횟수 {pulses}(20 이상이어야 함)");if(maxGap>750)wrong.Add($"화면 스레드의 가장 긴 공백 {maxGap:F1}ms(750ms 이하여야 함)");
   if(!sameInstance)wrong.Add("창을 다시 열 때 같은 창을 쓰지 않음");if(!previewSuppressed)wrong.Add("창이 열린 동안 미리 보기가 멈추지 않음");if(!updated)wrong.Add("바뀐 기록이 목록에 반영되지 않음");if(closes.Any(t=>t>500))wrong.Add($"닫기 {closes.Max():F1}ms(500ms 이하여야 함)");

@@ -1,4 +1,4 @@
-﻿"""전체 프레임에서 직접 읽은 씨앗 라벨(truth\\seed-labels-full\\claude-read-full-*.csv)을 검사하고 학습 자료로 만든다.
+﻿"""전체 프레임에서 확대 이미지를 직접 판독한 초기 학습 라벨(truth\\seed-labels-full\\claude-read-full-*.csv)을 검사하고 학습 자료로 만든다.
 
 읽은 값은 그대로 믿지 않는다. 아래를 모두 만족하는 것만 쓴다.
   - 그 사례의 점수 산식으로 나올 수 있는 값이다.
@@ -32,7 +32,7 @@ def main():
             for r in csv.DictReader(f):
                 wanted.setdefault(r["case"], {})[int(r["frame"]) - 1] = int(r["value"])
     if not wanted:
-        raise SystemExit(f"씨앗 라벨이 없다: {ROOT / 'truth' / 'seed-labels-full'}\\claude-read-full-*.csv\n직접 읽은 라벨은 저장소에 들어 있지 않다.")
+        raise SystemExit(f"초기 학습 라벨이 없다: {ROOT / 'truth' / 'seed-labels-full'}\\claude-read-full-*.csv\n직접 읽은 라벨은 저장소에 들어 있지 않다.")
     table = sources()
     images, labels, cases, frames = [], [], [], []
     passed = dropped = extra = 0

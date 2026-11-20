@@ -326,15 +326,15 @@ def save_predictions(d, values, conf, texts, out: Path):
 
 
 def seed_labels(d) -> dict:
-    """모델과 무관한 출발 라벨: OCR 이 읽고 규칙을 통과한 값 + 직접 읽은 씨앗 라벨 (LEFT·CENTER 만)."""
+    """모델과 무관한 출발 라벨: OCR 이 읽고 규칙을 통과한 값 + 직접 판독한 초기 학습 라벨 (LEFT·CENTER 만)."""
     seed = {i: v for i, v in ocr_labels(d).items() if d.cases[d.case_of[i]]["position"] in TRAIN_POS and not d.blank[i]}
     print(f"출발 라벨(OCR+규칙, LEFT·CENTER): {len(seed)}장, 사례 {len({d.case_of[i] for i in seed})}개", flush=True)
-    from .check_seeds import verified_seeds          # 직접 읽은 씨앗 라벨 (규칙을 통과한 것만)
+    from .check_seeds import verified_seeds          # 직접 판독한 초기 학습 라벨 (규칙을 통과한 것만)
     read = verified_seeds()
     hand = {i: read[key] for i, key in enumerate(zip((d.cases[k]["id"] for k in d.case_of), d.names))
             if key in read and d.cases[d.case_of[i]]["position"] in TRAIN_POS}
     seed.update(hand)
-    print(f"직접 읽은 씨앗 라벨: {len(hand)}장, 사례 {len({d.case_of[i] for i in hand})}개", flush=True)
+    print(f"직접 판독한 초기 학습 라벨: {len(hand)}장, 사례 {len({d.case_of[i] for i in hand})}개", flush=True)
     return seed
 
 

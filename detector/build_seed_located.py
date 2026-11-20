@@ -1,13 +1,14 @@
-"""찾은 자리로 자른 씨앗 라벨(truth\\seed-labels-located\\claude-read-located-*.csv)을 검사하고 학습 자료로 만든다 (LEFT·CENTER 만).
+"""찾은 자리로 자른 초기 학습 라벨(truth\\seed-labels-located\\claude-read-located-*.csv)을 검사하고 학습 자료로 만든다 (LEFT·CENTER 만).
 
-build_seed_full 의 씨앗은 Codex 영역으로 자른 조각이다. 여기의 씨앗은 같은 프레임을 **위치 탐색이 그 시각에 쓰던 영역**으로 자른다.
-판독기가 Codex 영역으로는 읽는데 찾은 자리로는 못 읽은 정상 프레임(자른 범위가 달라 흔들린 것)을 가르치려는 것이다.
+build_seed_full 의 초기 학습 라벨은 비교 기준으로 사용한 영역(기준 영역. 검사 설정에 적힌 점수 영역)으로 자른 조각이다.
+여기서는 같은 프레임을 **위치 탐색이 그 시각에 쓰던 영역**으로 자른다.
+판독기가 기준 영역으로는 읽는데 찾은 자리로는 못 읽은 정상 프레임(자른 범위가 달라 흔들린 것)을 가르치려는 것이다.
 
-라벨은 Claude 가 그림을 직접 읽어 확인한 값이다. 그래도 그대로 믿지 않고, 아래를 모두 만족하는 것만 쓴다(build_seed_full 과 같은 검사).
+라벨은 확대 이미지를 직접 판독해 확인한 값이다. 그래도 그대로 믿지 않고, 아래를 모두 만족하는 것만 쓴다(build_seed_full 과 같은 검사).
   - 그 사례의 점수 산식으로 나올 수 있는 값이다.
-  - 앞뒤로 가장 가까운 "규칙을 통과해 읽힌 값"(Codex 영역으로 읽은 실행) 사이에 있고, 증가폭이 판정의 합으로 설명된다.
+  - 앞뒤로 가장 가까운 "규칙을 통과해 읽힌 값"(기준 영역으로 읽은 실행) 사이에 있고, 증가폭이 판정의 합으로 설명된다.
 
-실행: .venv\\Scripts\\python.exe -m detector.build_seed_located <위치 탐색 실행(예: vid-d2-v15)> <Codex 영역으로 읽은 실행(앞뒤 값을 얻을 것)>
+실행: .venv\\Scripts\\python.exe -m detector.build_seed_located <위치 탐색 실행(예: vid-d2-v15)> <기준 영역으로 읽은 실행(앞뒤 값을 얻을 것)>
 출력: data\\seed_located.npz (images, labels, cases, frames)
 """
 import csv
@@ -44,7 +45,7 @@ def main():
                 if "-right-" not in r["case"]:
                     wanted.setdefault(r["case"], {})[int(r["frame"]) - 1] = int(r["value"])
     if not wanted:
-        raise SystemExit(f"씨앗 라벨이 없다: {ROOT / 'truth' / 'seed-labels-located'}\\claude-read-located-*.csv\n직접 읽은 라벨은 저장소에 들어 있지 않다.")
+        raise SystemExit(f"초기 학습 라벨이 없다: {ROOT / 'truth' / 'seed-labels-located'}\\claude-read-located-*.csv\n직접 읽은 라벨은 저장소에 들어 있지 않다.")
     table = sources()
     images, labels, cases, frames = [], [], [], []
     passed = dropped = 0
@@ -84,7 +85,7 @@ def main():
             images.append(letterbox(np.ascontiguousarray(frame[ya:yb, xa:xb]))[0]); labels.append(picks[k]); cases.append(case_id); frames.append(k + 1)
             passed += 1
     np.savez_compressed(ROOT / "data" / "seed_located.npz", images=np.stack(images), labels=np.array(labels), cases=np.array(cases), frames=np.array(frames))
-    print(f"찾은 자리 씨앗 라벨: 통과 {passed}장, 탈락 {dropped}장 (사례 {len(set(cases))}개) → data\\seed_located.npz")
+    print(f"찾은 자리 초기 학습 라벨: 통과 {passed}장, 탈락 {dropped}장 (사례 {len(set(cases))}개) → data\\seed_located.npz")
 
 
 if __name__ == "__main__":

@@ -24,7 +24,7 @@ static class Program
  if(args.Length==3&&args[0]=="--hud-rate-check"){Task.Run(()=>ScoreRateChecks.Rate(catalog,args[1],args[2])).GetAwaiter().GetResult();return;}
  if(args.Contains("--popup-fit-check")){OverlayPopupChecks.Run(catalog);return;}
  if(args.Contains("--dev-fixtures")){DevFixtureChecks.Run(catalog);return;}
- if(args.Length==2&&args[0]=="--audio-reference-build"){AudioReferenceChecks.Build(args[1]);return;}   // 동명곡 소리 기준을 만든다(tools\build_audio_references.py 가 부른다)
+ if(args.Length==2&&args[0]=="--audio-reference-build"){AudioReferenceChecks.Build(args[1]);return;}   // 동명곡 식별용 음향 기준을 만든다(tools\build_audio_references.py 가 부른다)
  if(args.Length==2&&args[0]=="--audio-reference-check"){AudioReferenceChecks.Check(args[1]);return;}
  if(args.Contains("--update-windows-check")){UpdateTests.Previews();return;}   // 자동 업데이트의 창을 그림으로 남긴다
  if(args.Contains("--update-official-check")){UpdateTests.Official();return;}   // 진짜 공식 저장소의 응답을 읽어 본다(인터넷을 쓴다)

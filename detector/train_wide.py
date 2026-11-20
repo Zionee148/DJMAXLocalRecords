@@ -1,6 +1,6 @@
 """판독기 보강: 자르는 위치가 달라져도 읽도록, 넓게 잘린 조각을 섞어 이전 모델에서 이어 학습한다.
 
-  - 라벨은 새로 만들지 않는다. 0.5초 자료에서 이전 모델이 규칙을 통과해 읽은 값과 씨앗 라벨(train_full 과 같은 방식)을 그대로 쓰고,
+  - 라벨은 새로 만들지 않는다. 0.5초 자료에서 이전 모델이 규칙을 통과해 읽은 값과 초기 학습 라벨(train_full 과 같은 방식)을 그대로 쓰고,
     같은 프레임을 여러 넓이로 다시 잘라 같은 라벨을 붙인다. 넓게 자른 조각에 옆의 글자나 장식이 들어와도 라벨은 점수 숫자뿐이다.
   - 전체 프레임에서 뽑은 자료(build_full_train)도 함께 쓴다. v7 이 나빠졌던 일을 되풀이하지 않도록 v6 를 만들 때 쓴 것(v5 판독에서 뽑은 것)을 쓴다.
   - RIGHT 녹화는 학습에 쓰지 않는다.
@@ -8,11 +8,11 @@
   - 다섯째 인자를 주면 "효과를 겹친 그림"도 만든다 (composites). 화면 효과가 점수판을 반쯤 덮은 프레임을 읽게 하려는 것이다.
 
   - 여덟째 인자(위치 탐색으로 읽은 실행, 예: vid-d2-v15)를 주면 "모듈이 실제로 자르는 자리"의 조각도 만든다 (located).
-    위치 탐색이 고정한 영역은 Codex 영역과 다르다(더 좁게 잡히는 기어가 많다. 그러면 숫자가 더 크게 들어간다). v15 를 찾은 자리로 읽었더니
-    Codex 영역으로는 읽는 정상 프레임 108장을 못 읽었다: So Happy 는 넓적한 숫자를 두 번 읽고(35087 → 335087), AURORA·MAID·GROOVE COASTER 는
+    위치 탐색이 고정한 영역은 기준 영역(검사 설정에 적힌 점수 영역)과 다르다(더 좁게 잡히는 기어가 많다. 그러면 숫자가 더 크게 들어간다). v15 를 찾은 자리로 읽었더니
+    기준 영역으로는 읽는 정상 프레임 108장을 못 읽었다: So Happy 는 넓적한 숫자를 두 번 읽고(35087 → 335087), AURORA·MAID·GROOVE COASTER 는
     붙어 있는 1 을 하나 빠뜨렸다(411152 → 41152). 가려진 프레임이 아니었다.
 
-실행: .venv\\Scripts\\python.exe -m detector.train_wide <새 이름> <이전 실행> [걸음 수=8000] [전체 프레임 자료 폴더=full_train-v5] [사례당 겹친 그림 수=0] [씨앗 라벨 반복 수=0] [학습률=0.001] [위치 탐색 실행=없음]
+실행: .venv\\Scripts\\python.exe -m detector.train_wide <새 이름> <이전 실행> [걸음 수=8000] [전체 프레임 자료 폴더=full_train-v5] [사례당 겹친 그림 수=0] [초기 학습 라벨 반복 수=0] [학습률=0.001] [위치 탐색 실행=없음]
 출력: data\\runs\\<새 이름>\\model.pt, round1.json, predictions.npz
 """
 import ctypes
@@ -64,7 +64,7 @@ def variants(d, half: dict, rng) -> tuple[list, list]:
 
 
 LOCATED_VARIANTS = 2
-LOCATED_SHAKE = 3       # 찾은 자리의 네 변을 이만큼(화소)까지 흔든다. 영역은 탐지 모델의 네모에 따라 조금씩 달라진다
+LOCATED_SHAKE = 3       # 찾은 자리의 네 변을 이만큼(화소)까지 흔든다. 영역은 탐지 모델의 검출 영역에 따라 조금씩 달라진다
 
 
 def located(d, half: dict, rng, run: str, shake: int = LOCATED_SHAKE, copies: int = LOCATED_VARIANTS) -> tuple[list, list, list]:
@@ -149,7 +149,7 @@ def main():
     steps = int(sys.argv[3]) if len(sys.argv) > 3 else 8000
     full_folder = sys.argv[4] if len(sys.argv) > 4 else "full_train-v5"
     per_case = int(sys.argv[5]) if len(sys.argv) > 5 else 0          # 사례마다 만들 "효과를 겹친 그림"의 수 (0 = 만들지 않음)
-    seed_copies = int(sys.argv[6]) if len(sys.argv) > 6 else 0       # 전체 프레임에서 직접 읽은 씨앗 라벨(build_seed_full)을 몇 번씩 넣을지 (0 = 안 넣음)
+    seed_copies = int(sys.argv[6]) if len(sys.argv) > 6 else 0       # 전체 프레임에서 직접 판독한 초기 학습 라벨(build_seed_full)을 몇 번씩 넣을지 (0 = 안 넣음)
     rate = float(sys.argv[7]) if len(sys.argv) > 7 else 1e-3          # 학습률의 꼭짓점. 이미 좋은 모델을 조금만 고칠 때는 낮춘다
     located_run = sys.argv[8] if len(sys.argv) > 8 else ""            # 위치 탐색으로 읽은 실행. 주면 그 영역으로 자른 조각도 넣는다
     try:
@@ -182,13 +182,13 @@ def main():
         z = np.load(ROOT / "data" / "seed_full.npz")
         for _ in range(seed_copies):
             wide_images += list(z["images"]); wide_labels += [int(v) for v in z["labels"]]
-        print(f"직접 읽은 씨앗 라벨 {len(z['labels'])}장 x {seed_copies}번", flush=True)
+        print(f"직접 판독한 초기 학습 라벨 {len(z['labels'])}장 x {seed_copies}번", flush=True)
     if seed_copies and located_run and (ROOT / "data" / "seed_located.npz").exists():
-        # 같은 뜻의 씨앗이지만 찾은 자리로 자른 것 (build_seed_located). Codex 영역으로는 읽는데 찾은 자리로는 못 읽던 정상 프레임이다.
+        # 같은 종류의 초기 학습 라벨이지만 찾은 자리로 자른 것 (build_seed_located). 기준 영역으로는 읽는데 찾은 자리로는 못 읽던 정상 프레임이다.
         z = np.load(ROOT / "data" / "seed_located.npz")
         for _ in range(seed_copies):
             wide_images += list(z["images"]); wide_labels += [int(v) for v in z["labels"]]
-        print(f"찾은 자리로 자른 씨앗 라벨 {len(z['labels'])}장 x {seed_copies}번", flush=True)
+        print(f"찾은 자리로 자른 초기 학습 라벨 {len(z['labels'])}장 x {seed_copies}번", flush=True)
     total = len(half_index) + len(wide_images) + sum(counts)
     images = np.empty((total, HEIGHT, WIDTH, 3), np.uint8)
     images[:len(half_index)] = d.images[half_index]
@@ -213,7 +213,7 @@ def main():
 
     # 다듬기: 학습 라벨이 있는데도 다르게 읽는 0.5초 프레임을 여러 번 더 보여 준다.
     # v7·v8 에서 GROOVE COASTER 의 한 값(58771)을 587711 로 읽기 시작했는데, 그 프레임은 라벨이 맞게 붙어 있었다.
-    # 28만 장 가운데 한 장이라 묻힌 것이다. 여기서 쓰는 것은 학습 라벨뿐이고 Codex 검토 라벨은 쓰지 않는다.
+    # 28만 장 가운데 한 장이라 묻힌 것이다. 여기서 쓰는 것은 학습 라벨뿐이고 채점용 검토 라벨(reviewed-source-labels)은 쓰지 않는다.
     def wrong_ones():
         v, _, _ = predict(model, images[:len(half_index)])
         return [k for k in range(len(half_index)) if labels[k] >= 0 and int(v[k]) != labels[k]]
@@ -230,7 +230,7 @@ def main():
     save_predictions(d, values, conf, texts, out)
     rows_train = evaluate(d, values, conf, TRAIN_POS)
     print("   LEFT·CENTER  " + summary(rows_train), flush=True)
-    # RIGHT 는 LEFT·CENTER 가 기준을 통과한 뒤에 본다 (사용자 결정). 여기서는 채점하지도 출력하지도 않는다.
+    # RIGHT 는 LEFT·CENTER 가 기준을 통과한 뒤에 본다. 여기서는 채점하지도 출력하지도 않는다.
     (out / "round1.json").write_text(json.dumps({"train": rows_train}, ensure_ascii=False, indent=1), encoding="utf-8")
 
 

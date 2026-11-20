@@ -1,7 +1,7 @@
 """등록 판단(judge.py)을 .NET 으로 옮긴 것이 같은 답을 내는지 확인할 자료를 만든다.
 
-사례마다 프레임별 판독(시각, 값, 또렷이 읽혔는가, 고정 뒤인가)을 그대로 내보내고, 여러 상황(실제 키 시각, 키를 일찍·늦게 누름,
-앱을 늦게 켬, 캡처 간격을 바꿈)마다 Python 이 낸 답을 적는다. .NET 쪽(dotnet\\ModuleCheck)이 같은 판독을 같은 상황으로 흘려 넣어 견준다.
+사례마다 프레임별 판독(시각, 값, 또렷이 읽혔는가, 고정 뒤인가)을 reads.bin 에 그대로 내보내고, 시나리오(SCENARIOS: 실제 키 시각, 키를 일찍·늦게 누름,
+앱을 늦게 켬, 캡처 간격을 바꿈)별로 Python 의 등록 판정 결과를 expected.tsv 에 저장한다. ModuleCheck(dotnet\\ModuleCheck)는 같은 입력을 .NET 모듈에 전달해 두 결과를 비교한다.
 
 실행: .venv\\Scripts\\python.exe -m detector.export_judge <위치 탐색 실행 폴더(예: vid-d2-v17-r)>
 출력: data\\parity_judge\\reads.bin, expected.tsv

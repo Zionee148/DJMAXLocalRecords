@@ -128,15 +128,15 @@ class StylePreview:Control
    using var normal=F(size,false);using var bold=F(size);
    return size*Math.Min(1,453/Math.Max(1,M(label,normal)+M("100.00%",bold)));
   }
-  float goal=FitRow("개인 최고 점수 :",N("GoalSize")),current=FitRow("현재 점수 :",N("CurrentSize"));
+  float goal=FitRow("개인 최고 점수:",N("GoalSize")),current=FitRow("현재 점수:",N("CurrentSize"));
   float scoresScale=Math.Min(1,Math.Max(55,height-15-row)/(1.6f*(goal+(ShowCurrent?current:0))));
   void Score(string label,string value,float fontSize,Brush brush,float y){
    using var normal=F(fontSize,false);using var bold=F(fontSize);
    Text(label,normal,brush,26,y);Text(value,bold,brush,width-26-M(value,bold),y);
   }
   Brush tone=Mode==0?above:Mode==1?below:ink;
-  Score("개인 최고 점수 :",Mode==3?"-":Mode==2?"미등록":"99.25%",goal*scoresScale,ShowCurrent?ink:tone,row);
-  if(ShowCurrent)Score("현재 점수 :",Mode==3?"-":Mode==1?"98.72%":"99.48%",current*scoresScale,tone,row+goal*scoresScale*1.6f);
+  Score("개인 최고 점수:",Mode==3?"-":Mode==2?"미등록":"99.25%",goal*scoresScale,ShowCurrent?ink:tone,row);
+  if(ShowCurrent)Score("현재 점수:",Mode==3?"-":Mode==1?"98.72%":"99.48%",current*scoresScale,tone,row+goal*scoresScale*1.6f);
  }
  void DrawChevrons(Graphics g,int width,int height,int alpha){if(started==0)return;double elapsed=Environment.TickCount64-started;var defs=new[]{(3,56,0,1950),(13,92,400,2300),(25,42,180,1650),(36,68,750,2100),(49,38,360,1850),(60,100,120,2450),(73,54,620,1950),(86,80,280,2200),(95,34,850,1600),(19,48,1500,1900),(55,60,1600,2000),(80,40,1750,1750)};float scale=height/290f;foreach(var (x,size,delay,time) in defs){double p=(elapsed-delay*.44)/(time*.52);if(p<0||p>1)continue;float opacity=(float)(Math.Min(1,Math.Min(p/.2,(1-p)/.2))*.38*(size>80?.7:1));float w=size*scale*1.6f,h=size*scale*1.8f,left=width*x/100f-w/2,top=height+100+(180-(float)p*670)*scale-h;var points=new[]{new PointF(left,top+h*.26f),new PointF(left+w/2,top),new PointF(left+w,top+h*.26f),new PointF(left+w,top+h),new PointF(left+w/2,top+h*.74f),new PointF(left,top+h)};using var path=new System.Drawing.Drawing2D.GraphicsPath();path.AddPolygon(points);using var brush=new System.Drawing.Drawing2D.LinearGradientBrush(new RectangleF(left,top,w,h),Color.FromArgb((int)(alpha*opacity),177,237,118),Color.Transparent,90f);g.FillPath(brush,path);}}
 }

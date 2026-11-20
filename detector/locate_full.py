@@ -2,10 +2,10 @@
 
 읽은 뒤 보는 법:
   python -m detector.full_summary loc-<탐지>-<판독>[-all] left-center     (고정 뒤 구간의 규칙 통과율과 최종 점수)
-  python -m detector.locate_compare <판독> loc-<탐지>-<판독>[-all]        (Codex 영역으로 읽은 결과와 프레임별 비교)
+  python -m detector.locate_compare <판독> loc-<탐지>-<판독>[-all]        (기준 영역으로 읽은 결과와 프레임별 비교)
 
 
-locate_run 의 채점은 0.5초 간격 화면의 최종 점수다. 사용자 기준은 전체 프레임이므로, 여기서는 찾은 자리로
+locate_run 의 채점은 0.5초 간격 화면의 최종 점수다. 통과 기준은 전체 프레임으로 재므로, 여기서는 찾은 자리로
 원본 영상의 모든 프레임을 읽어 full_frames 와 같은 꼴로 남긴다. 그러면 full_summary 와 비교 도구를 그대로 쓸 수 있다.
 
   1) 구간 처음부터 0.1초 간격 화면을 넣어 위치를 고정한다 (locate_run.locate. 위치·기어·점수를 알려 주지 않는다).
@@ -43,7 +43,7 @@ from .selftrain import BLANK_STD, DATA_NAME, DEVICE, ROOT, load_model, to_tensor
 VIDEO_FPS = 60.0
 
 
-RETRY_MARGIN = (4, 2)     # 못 읽은 프레임을 한 번 더 읽을 때의 여백(가로, 세로). 찾은 자리는 Codex 영역보다 넉넉해 평소 여백(14, 8)까지 두면 둘레가 많이 들어간다
+RETRY_MARGIN = (4, 2)     # 못 읽은 프레임을 한 번 더 읽을 때의 여백(가로, 세로). 찾은 자리는 기준 영역(검사 설정에 적힌 점수 영역)보다 넉넉해 평소 여백(14, 8)까지 두면 숫자 주변이 많이 들어간다
 
 
 @torch.no_grad()

@@ -1,4 +1,4 @@
-"""숫자 줄 탐지 모델: 화면 아래쪽 띠를 보고 "점수 숫자 줄이 여기 있다"는 지도와 그 줄의 네모를 낸다.
+"""숫자 줄 탐지 모델: 화면 아래쪽 띠를 보고 "점수 숫자 줄이 여기 있다"는 지도와 그 줄의 검출 영역(사각형)을 낸다.
 
   - 입력: RGB 그림 [묶음, 3, 높이, 너비] (0~1). 크기는 자유다. 좌표를 입력으로 받지 않는다.
   - 출력: 4화소마다 한 칸. 칸마다 [숫자 줄 안인가(로짓), 왼쪽·위·오른쪽·아래 가장자리까지의 거리(화소 ÷ SCALE)].
@@ -31,7 +31,7 @@ class RowFinder(nn.Module):
 
 @torch.no_grad()
 def find_rows(model: RowFinder, images: np.ndarray, device, threshold: float = 0.5) -> list[list[tuple]]:
-    """그림 묶음(RGB, uint8, [N,H,W,3]) → 그림마다 (x0, y0, x1, y1, 점수) 목록. 점수가 높은 순서."""
+    """그림 묶음(RGB, uint8, [N,H,W,3]) → 그림마다 검출 영역 (x0, y0, x1, y1, 평균 확률) 의 목록. 평균 확률이 높은 순서."""
     x = torch.from_numpy(images).to(device).permute(0, 3, 1, 2).float() / 255
     logit, dist = model(x)
     prob = torch.sigmoid(logit).cpu().numpy(); dist = dist.cpu().numpy() * SCALE

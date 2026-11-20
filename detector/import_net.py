@@ -1,8 +1,8 @@
-""".NET 모듈이 녹화를 처음부터 끝까지 읽은 결과(dotnet\\ModuleCheck 의 run)를 시제품과 같은 모양으로 바꾼다.
+""".NET 모듈이 녹화를 처음부터 끝까지 읽은 결과(dotnet\\ModuleCheck 의 run)를 시제품(Python 도구 locate_video)의 결과와 같은 형식으로 바꾼다.
 
 바꾼 뒤에는 시제품에 쓰던 채점 도구를 그대로 쓴다:
   python -m detector.locate_video d2 <판독 이름>-net --summary
-  python -m detector.locate_video d2 <판독 이름>-net --normal v12 <Codex 영역으로 읽은 실행>
+  python -m detector.locate_video d2 <판독 이름>-net --normal v12 <기준 영역으로 읽은 실행>
   python -m detector.judge vid-d2-<판독 이름>-net
 
 프레임의 시각(pts)은 같은 사례를 시제품으로 읽은 결과에서 가져온다(프레임 수가 같을 때. 다르면 번호 ÷ 60).

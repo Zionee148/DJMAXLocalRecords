@@ -4,13 +4,13 @@ using System.Text.Json;
 
 namespace LadderRecords;
 
-// V아카이브 가져오기와, 하드·맥스 기록이 노말에 함께 반영되는 규칙을 저장 계층에서 본다(이름의 release 는 옛 배포 준비 때 붙은 것이다. 배포본에 들어가는 검사가 아니다).
+// V아카이브 가져오기와, 하드·맥스 기록이 노말에 함께 반영되는 규칙을 저장 계층에서 검사한다(이름의 release 는 옛 배포 준비 때 붙은 것이다. 배포본에 들어가는 검사가 아니다).
 //  V아카이브: 응답 네 개(4·5·6·8버튼)를 읽어 곡 목록의 채보로 옮긴다, 미리 보기와 실제 가져오기가 같고 한 번의 저장이다, 새 기록은 횟수·최근 플레이가 비어 있다,
 //             이미 있는 기록의 횟수·날짜와 더 높은 내 기록은 그대로다, 되돌리기 한 번으로 모두 돌아온다.
-//  노말 반영: 하드로 올리면 노말도 오르고 횟수·날짜가 따라간다, 같은 점수의 맥스는 노말을 건드리지 않는다, 되돌리기가 함께 돌린다, 노말은 하드를 쓰지 않는다.
+//  노말 반영: 하드로 올리면 노말도 오르고 횟수·날짜가 따라간다, 같은 점수의 맥스는 노말을 건드리지 않는다, 되돌리기는 하드와 노말을 함께 되돌린다, 노말 플레이는 하드 기록을 만들지 않는다.
 // 자료: 폴더에 button-4.json, button-5.json, button-6.json, button-8.json(V아카이브 응답 형식). 합성 표본은 --dev-fixtures 가 dev-fixtures\varchive 에 만든다.
 // 실행: DJMAXLocalRecords.exe --release-feature-check <표본 폴더>. 몇 초 걸린다. 결과 release-feature-validation.json
-// 실제 V아카이브에 접속하지 않는다. 지금 서비스의 응답이 이 형식과 같은지, 접속·닉네임 오류의 처리는 보지 않는다.
+// 실제 V아카이브에 접속하지 않는다. 지금 서비스의 응답이 이 형식과 같은지, 접속·닉네임 오류의 처리는 검사 범위 밖이다.
 static class ReleaseFeatureChecks
 {
  public static void Run(Catalog catalog,string fixtures)

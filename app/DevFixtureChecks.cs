@@ -1,14 +1,14 @@
 using System.Text.Json;
 namespace LadderRecords;
 
-// 검사를 돌릴 수 없다(자료가 없거나 환경이 맞지 않는다). 검사가 틀린 것을 찾은 "실패"와 구분한다.
-// 실행 도구(tools\run_dev_checks.py)가 test-error.txt 의 첫 줄에서 이 이름을 보고 "실행 불가"로 가른다.
+// 검사를 실행할 수 없을 때 던지는 예외다(자료가 없거나 환경이 맞지 않는다). 검사가 실패한 경우("실패")와 구분한다.
+// 실행 도구(tools\run_dev_checks.py)는 test-error.txt 의 첫 줄에 이 예외 이름이 있으면 결과를 "실행 불가"로 분류한다.
 class CheckUnavailableException(string message):Exception(message);
 
 static class CheckPorts
 {
- // 시험용 주 화면을 만든다. 그 포트를 다른 프로그램이 이미 쓰고 있어서 못 만든 것만 "실행 불가"로 알린다(환경 탓이다). 그 밖의 오류는 그대로 낸다(검사가 찾아야 할 것일 수 있다).
- // 리뷰 docs\reviews\20261116-개발용검사정리-후속변경-리뷰.md 1번: 전에는 오버레이 검사만 갈랐고 단축키 흐름·기록 창 검사는 "실패"로 나왔다
+ // 시험용 주 화면을 만든다. 검사 포트를 다른 프로그램이 사용 중이어서 만들지 못하면 CheckUnavailableException 을 던져 "실행 불가"로 기록되게 한다. 그 밖의 오류는 그대로 전달한다(검사가 찾아야 할 문제일 수 있다).
+ // 오버레이 상태·단축키 흐름·기록 창 검사가 모두 이 메서드로 주 화면을 만든다(리뷰 docs\reviews\20261116-개발용검사정리-후속변경-리뷰.md 1번)
  public static T Open<T>(int port,Func<T> create)
  {
   try{return create();}

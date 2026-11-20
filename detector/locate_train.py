@@ -117,7 +117,7 @@ def main():
         loss = loss_map + loss_box
         optimizer.zero_grad(); loss.backward(); optimizer.step(); schedule.step()
         if step % 500 == 0 or step == steps:
-            print(f"  {step}/{steps} 지도 {loss_map.item():.4f} 네모 {loss_box.item():.4f} ({time.time() - started:.0f}초)", flush=True)
+            print(f"  {step}/{steps} 지도 {loss_map.item():.4f} 영역 {loss_box.item():.4f} ({time.time() - started:.0f}초)", flush=True)
     out = RUNS / name; out.mkdir(parents=True, exist_ok=True)
     torch.save(model.state_dict(), out / (f"fold{which}.pt" if which != "all" else "all.pt"))
 

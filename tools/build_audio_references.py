@@ -1,4 +1,4 @@
-"""동명곡을 가리는 소리 기준(app\\runtime\\data\\audio\\<SourceId>.bin)을 직접 녹화한 영상의 게임 소리에서 다시 만들고 확인한다.
+"""동명곡 식별용 음향 기준(app\\runtime\\data\\audio\\<SourceId>.bin)을 직접 녹화한 영상의 게임 소리에서 다시 만들고 확인한다.
 
 쓰는 법 (프로젝트 폴더에서. 먼저 앱을 Debug 로 빌드해 둔다):
     .venv\\Scripts\\python.exe tools\\build_audio_references.py <새 결과 이름> --build <Debug 빌드 폴더>
@@ -10,22 +10,22 @@
      녹화가 있는 폴더는 환경 변수 DJMAX_SAME_NAME_VIDEOS 나 저장소 맨 위 local-paths.json 의 same_name_videos 로 알려 준다
      (알려 주지 않으면 멈춘다). 녹화는 제작자가 직접 녹화한 것이고 저장소에 들어 있지 않다. 원본은 읽기만 한다.
   2. 녹화마다 정해 둔 트랙의, 곡이 나오는 구간(앞 5초·뒤 1초를 붙여)을 뽑아 data\\audio-rebuild\\<이름>\\wav\\<SourceId>.wav 로 쓴다.
-     앱이 플레이 중에 게임 소리를 받는 방식과 같게 만든다: 44,100Hz 스테레오 → 두 채널의 평균 → 걸러 내지 않고 네 개에 하나씩(11,025Hz).
-     (app\\LoopbackAudio.cs 가 그렇게 한다. 기준과 플레이 중의 소리가 같은 길을 거치게 하려는 것이다. 속도나 음색을 바꾸지 않는다)
+     앱이 플레이 중에 게임 소리를 받는 방식과 같게 만든다: 44,100Hz 스테레오 → 두 채널의 평균 → 필터 없이 표본 네 개에 하나씩(11,025Hz).
+     (app\\LoopbackAudio.cs 가 그렇게 한다. 기준과 플레이 중의 소리에 같은 전처리를 적용하려는 것이다. 속도나 음색을 바꾸지 않는다)
   3. 앱의 개발용 빌드를 불러(--audio-reference-build) 앱이 쓰는 계산(AudioIdentity.Features)으로 bin 14개를 만든다 → …\\bin\\
   4. 앱의 개발용 빌드를 불러(--audio-reference-check) 앱이 쓰는 판단(AudioIdentity.Decide: 비교값 0.60 이상, 다음 후보와 0.12 이상 차이)으로 확인한다.
        same-play    기준을 만든 바로 그 녹화에서 자른 8초들(곡의 처음부터 끝까지 10초마다). **같은 녹화로 본 것이다. 다른 플레이에서도 된다는 뜻이 아니다**
-       start        플레이가 시작될 때: 소리를 받기 시작한 때를 곡의 5초 전·3초 전·곡의 시작으로 놓고, 1초마다 직전 8초로 물어 언제 확정되는지
+       start        플레이가 시작될 때: 소리를 받기 시작한 때를 곡의 5초 전·3초 전·곡의 시작으로 놓고, 1초마다 직전 8초 구간의 식별을 요청해 언제 확정되는지
        other-song   다른 쌍의 곡을 들려주었을 때 확정하지 않는지(곡 밖의 소리)
        jingle       곡이 끝난 뒤 결과 화면의 소리를 들려주었을 때 확정하지 않는지
        other-play   (--other-plays 를 줬을 때) 다른 사람이 실제로 플레이한 소리의 8초들. 그 폴더의 video-manifest.json 과 youtube\\<영상>.wav 를 읽는다
-     통과의 조건(judge): 틀리게 확정한 것이 없고, **검사하지 못한 물음(구간이 소리 밖 등)이 없고**, 물은 수만큼 답이 있고,
+     통과의 조건(judge): 틀리게 확정한 것이 없고, **비교하지 못한 구간(구간이 소리 밖 등)이 없고**, 요청한 구간 수와 결과 수가 같고,
      same-play 는 곡마다 있고 모두 맞고, start 는 곡·조건마다 끝까지 한 번은 확정하고, other-play 가 있는 곡은 하나는 맞힌다.
      하나라도 어긋나면 종료 코드 1 이다. 곡이 시작하기 전이나 다른 플레이의 끝부분에서 확정하지 못한 것은 통과를 막지 않는다.
      통과시키려고 판단의 기준을 바꾸지 않는다.
   5. --apply 를 주면(그리고 위의 조건을 통과하면) bin 14개를 app\\runtime\\data\\audio\\ 에 복사한다(파일 이름은 그대로다).
   --verify-build: 빌드 폴더의 data\\audio 에 복사된 bin 이 이 결과의 bin 과 같은지(SHA-256) 보고, 그 파일로 same-play 를 다시 돌린다.
-     같은 조건으로 판정한다(물음이 만들 때와 같은 수이고, 검사하지 못한 것이 없고, 곡마다 모두 맞아야 한다).
+     같은 조건으로 판정한다(요청한 구간이 만들 때와 같은 수이고, 비교하지 못한 구간이 없고, 곡마다 모두 맞아야 한다).
 
 결과: data\\audio-rebuild\\<이름>\\summary.json (원본·뽑은 소리·bin 의 대응과 해시, 쓴 명령과 도구 버전, 확인 결과). wav 와 bin 도 그 폴더에 있다.
 원본 녹화와 뽑은 소리는 git 과 배포물에 넣지 않는다(data\\ 는 git 밖이다).
@@ -75,7 +75,7 @@ def tool(name: str) -> str:
 
 
 def like_app(source: Path, track: int | None, start: float | None, end: float | None) -> tuple[np.ndarray, list[str]]:
-    """소리를 앱이 받는 방식대로 푼다: 44,100Hz 스테레오 16비트 → 두 채널의 평균 → 네 개에 하나씩. (11,025Hz 의 값들, 쓴 명령)"""
+    """소리를 앱이 받는 방식대로 푼다: 44,100Hz 스테레오 16비트 → 두 채널의 평균 → 표본 네 개에 하나씩. (11,025Hz 의 표본 값, 실행한 ffmpeg 명령)을 돌려준다."""
     command = [tool("ffmpeg"), "-hide_banner", "-loglevel", "error"]
     if start is not None:
         command += ["-ss", f"{start:.3f}"]
@@ -142,22 +142,22 @@ START_LABELS = ("5초 전", "3초 전", "곡의 시작")
 
 
 def judge(rows: list[dict], asked: int, songs: list[str], whole: bool) -> list[str]:
-    """확인이 통과하지 못한 까닭들(비어 있으면 통과). 만든 뒤의 확인, 빌드 확인, --apply 가 모두 이 판정을 쓴다.
+    """확인이 통과하지 못한 사유의 목록을 돌려준다(비어 있으면 통과). 만든 뒤의 확인, 빌드 확인, --apply 가 모두 이 판정을 쓴다.
 
-    검사하지 못한 것(refused: 비교 자체를 하지 못했다)과 검사한 뒤의 미확정을 가른다.
-      - 물은 수와 답의 수가 다르거나 검사하지 못한 물음이 하나라도 있으면 통과가 아니다.
-      - 틀리게 확정한 것이 하나라도 있으면 통과가 아니다(확정하지 않아야 하는 물음을 확정한 것도 틀린 것이다).
-      - 같은 녹화의 물음은 곡마다 있어야 하고 모두 맞아야 한다.
-      - whole(만든 뒤의 확인): 곡이 시작할 때의 물음도 곡·조건마다 있어야 하고 20초까지 한 번은 확정해야 한다.
-        다른 플레이의 물음이 있는 곡은 그 가운데 하나는 맞혀야 한다.
+    비교하지 못한 구간(refused: 비교 자체를 하지 못했다)과 비교한 뒤의 미확정을 구분한다.
+      - 요청한 구간 수와 결과 수가 다르거나 비교하지 못한 구간이 하나라도 있으면 통과가 아니다.
+      - 틀리게 확정한 것이 하나라도 있으면 통과가 아니다(확정하지 않아야 하는 구간을 확정한 것도 틀린 것이다).
+      - 같은 녹화의 구간은 곡마다 있어야 하고 모두 맞아야 한다.
+      - whole(만든 뒤의 확인): 곡이 시작할 때의 구간도 곡·조건마다 있어야 하고 20초까지 한 번은 확정해야 한다.
+        다른 플레이의 구간이 있는 곡은 그 가운데 하나는 맞혀야 한다.
     곡이 시작하기 전이나 다른 플레이의 끝부분에서 확정하지 못한 것은 통과를 막지 않는다. 판단의 기준(0.60, 0.12)은 여기서 바꾸지 않는다.
     """
     problems = []
     if len(rows) != asked:
-        problems.append(f"물은 것은 {asked}개인데 답은 {len(rows)}개다")
+        problems.append(f"요청한 구간은 {asked}개인데 결과는 {len(rows)}개다")
     refused = [r for r in rows if r["refused"]]
     if refused:
-        problems.append(f"검사하지 못한 물음이 {len(refused)}개 있다(비교 자체를 하지 못했다): {', '.join(sorted({r['refused'] for r in refused}))}")
+        problems.append(f"비교하지 못한 구간이 {len(refused)}개 있다(비교 자체를 하지 못했다): {', '.join(sorted({r['refused'] for r in refused}))}")
     wrong = [r for r in rows if not r["refused"] and r["decided"] is not None and r["decided"] != r["expect"]]
     if wrong:
         problems.append(f"틀리게 확정한 것이 {len(wrong)}개 있다")
@@ -165,7 +165,7 @@ def judge(rows: list[dict], asked: int, songs: list[str], whole: bool) -> list[s
         same = [r for r in rows if r["group"] == "same-play" and r["expect"] == ident]
         missed = [r for r in same if r["decided"] != ident]
         if not same:
-            problems.append(f"같은 녹화의 물음이 없다: {ident}")
+            problems.append(f"같은 녹화의 구간이 없다: {ident}")
         elif missed:
             problems.append(f"같은 녹화의 구간 {len(same)}개 가운데 {len(missed)}개를 맞히지 못했다: {ident}")
         if not whole:
@@ -173,7 +173,7 @@ def judge(rows: list[dict], asked: int, songs: list[str], whole: bool) -> list[s
         for label in START_LABELS:
             seq = [r for r in rows if r["group"] == f"start/{label}" and r["expect"] == ident]
             if not seq:
-                problems.append(f"곡이 시작할 때의 물음이 없다({label}): {ident}")
+                problems.append(f"곡이 시작할 때의 구간이 없다({label}): {ident}")
             elif not any(r["decided"] == ident for r in seq):
                 problems.append(f"곡이 시작할 때({label}) 끝까지 한 번도 확정하지 못했다: {ident}")
         for kind in ("reference", "query"):
@@ -181,12 +181,12 @@ def judge(rows: list[dict], asked: int, songs: list[str], whole: bool) -> list[s
             if other and not any(r["decided"] == ident for r in other):
                 problems.append(f"다른 플레이({kind})의 구간 {len(other)}개를 하나도 맞히지 못했다: {ident}")
     if whole and not any(r["group"] == "other-song" for r in rows):
-        problems.append("다른 쌍의 곡을 들려주는 물음이 없다")
+        problems.append("다른 쌍의 곡을 들려주는 구간이 없다")
     return problems
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="동명곡을 가리는 소리 기준을 직접 녹화한 영상에서 다시 만들고 확인한다.")
+    parser = argparse.ArgumentParser(description="동명곡 식별용 음향 기준을 직접 녹화한 영상에서 다시 만들고 확인한다.")
     parser.add_argument("name", help="결과 이름(data\\audio-rebuild\\<이름>)")
     parser.add_argument("--build", type=Path, required=True, help="앱의 Debug 빌드 폴더(DJMAXLocalRecords.exe 가 있는 곳)")
     parser.add_argument("--other-plays", type=Path, help="다른 플레이의 소리가 있는 폴더(video-manifest.json 과 youtube\\<영상>.wav)")
@@ -214,7 +214,7 @@ def build(args) -> int:
     sources = spec["sources"]
     if VIDEOS is None:
         raise Stop("녹화가 있는 폴더를 알려 주지 않았다. 환경 변수 DJMAX_SAME_NAME_VIDEOS 나 저장소 맨 위 local-paths.json 의 same_name_videos 로 알려 준다.\n"
-                   "녹화(tools\\audio_references.json 에 적힌 14개)는 저장소에 들어 있지 않다. 없으면 소리 기준을 다시 만들 수 없다.")
+                   "녹화(tools\\audio_references.json 에 적힌 14개)는 저장소에 들어 있지 않다. 없으면 음향 기준을 다시 만들 수 없다.")
     missing = [s["file"] for s in sources if not (VIDEOS / s["file"]).is_file()]
     if missing:
         raise Stop(f"녹화를 찾지 못했다({VIDEOS}): {', '.join(missing)}")
@@ -238,7 +238,7 @@ def build(args) -> int:
         wav = out / "wav" / f"{s['source_id']}.wav"
         write_wav(samples, wav)
         wavs[ident], lengths[ident] = wav, len(samples) / RATE
-        # 곡이 끝난 뒤의 소리(결과 화면). 기준에는 넣지 않고, "곡 밖의 소리"로 물어볼 때만 쓴다
+        # 곡이 끝난 뒤의 소리(결과 화면). 기준에는 넣지 않고, 확정하지 않아야 하는 구간(jingle)으로 요청할 때만 쓴다
         after, _ = like_app(video, track, s["song"][1] + 1.5, None)
         outro = out / "outro" / f"{s['source_id']}.wav"
         write_wav(after, outro)
@@ -310,13 +310,13 @@ def build(args) -> int:
     for group in sorted({row["group"].split("/")[0] for row in rows}):
         part = [row for row in rows if row["group"].split("/")[0] == group]
         counts = tally(part)
-        if group in ("other-song", "jingle"):       # 확정하지 않아야 맞다. 검사하지 못한 것(refused)은 맞은 것으로 세지 않는다
+        if group in ("other-song", "jingle"):       # 확정하지 않아야 맞다. 비교하지 못한 구간(refused)은 맞은 것으로 세지 않는다
             counts = {"not_decided(맞음)": counts["undecided"], "decided(틀림)": counts["right"] + counts["wrong"], "refused": counts["refused"]}
             wrong += counts["decided(틀림)"]
         else:
             wrong += counts["wrong"]
         summary["checks"][group] = {"queries": len(part), **counts}
-        print(f"[{group}] 물음 {len(part)}개: {counts}")
+        print(f"[{group}] 구간 {len(part)}개: {counts}")
     # 곡마다: 같은 녹화, 다른 플레이
     per_song = {}
     for ident in wavs:
@@ -379,7 +379,7 @@ def verify_build(args) -> int:
         raise Stop(f"빌드 폴더의 자료가 이 결과와 다르다: {bad} {extra}")
     if args.hash_only:
         return 0
-    # 빌드에 복사된 파일을 앱이 읽게 해서 같은 녹화의 물음을 다시 돌린다
+    # 빌드에 복사된 파일을 앱이 읽게 해서 같은 녹화의 구간을 다시 확인한다
     job = json.loads((out / "check-job.json").read_text(encoding="utf-8"))
     job["references"] = {ident: "app" for ident in job["references"]}
     job["queries"] = [q for q in job["queries"] if q["group"] == "same-play"]
@@ -390,12 +390,12 @@ def verify_build(args) -> int:
     report = json.loads(Path(job["report"]).read_text(encoding="utf-8"))
     counts = tally(report["rows"])
     hashes = all(report["references"][e["id"]]["sha256"] == e["bin_sha256"] for e in summary["sources"])
-    print(f"앱이 빌드 폴더의 data\\audio 에서 읽은 파일의 해시가 같음: {hashes}.  같은 녹화의 물음 {len(report['rows'])}개: {counts}")
-    # 만든 뒤의 확인과 같은 판정을 쓴다: 물음이 빠지거나 검사하지 못했으면 통과가 아니다
+    print(f"앱이 빌드 폴더의 data\\audio 에서 읽은 파일의 해시가 같음: {hashes}.  같은 녹화의 구간 {len(report['rows'])}개: {counts}")
+    # 만든 뒤의 확인과 같은 판정을 쓴다: 요청한 구간이 빠지거나 비교하지 못했으면 통과가 아니다
     problems = judge(report["rows"], len(job["queries"]), [e["id"] for e in summary["sources"]], whole=False)
     made = summary["checks"].get("same-play", {}).get("queries")
     if len(job["queries"]) != made:
-        problems.append(f"같은 녹화의 물음이 만들 때({made}개)와 다르다: {len(job['queries'])}개")
+        problems.append(f"같은 녹화의 구간 수가 만들 때({made}개)와 다르다: {len(job['queries'])}개")
     if not hashes:
         problems.append("앱이 읽은 기준 파일이 이 결과의 bin 과 다르다")
     for problem in problems:

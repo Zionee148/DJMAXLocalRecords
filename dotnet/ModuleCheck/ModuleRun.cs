@@ -1,10 +1,10 @@
-// 녹화를 모듈 본체(ScoreModule)에 앱이 부르는 모양 그대로 넣고, 등록 요청의 답을 받는다.
+// 녹화를 모듈 본체(ScoreModule)에 앱이 호출하는 방식 그대로 넣고, 등록 요청의 답을 받는다.
 //
 //   플레이 중: 원본 녹화의 모든 프레임(초당 60장)을 ObserveFrame 으로 넣는다. 모듈이 스스로 자리를 찾아 고정하고, 고정 뒤에는 0.2초마다만 읽는다.
 //   키 시각  : BeginRegistration (기한은 요청부터 8초).
 //   요청 뒤  : 캡처 간격(기본 0.1초)마다 한 장씩 PushRegistrationFrame. 답이 나오면 멈춘다. 녹화가 먼저 끝나면 기한이 지난 것으로 친다.
 //
-// 화면은 BGRA 로 바꾸고, 띠 둘레에 남는 화소와 줄 끝 여백을 붙여 넘긴다(모듈이 잘라 쓰는 길을 함께 지나가게 하려는 것이다).
+// 화면은 BGRA 로 바꾸고, 띠 둘레에 남는 화소와 줄 끝 여백을 붙여 넘긴다(모듈이 받은 화면에서 띠를 잘라 내는 처리도 함께 실행되게 하려는 것이다).
 //
 // 실행: dotnet run -c Release -- module <finder.onnx> <reader.onnx> <cases.tsv> <결과.tsv> [--workers N] [--capture 초] [--every N] [--timing] [사례 이름에 들어 있는 글자 …]
 //       --timing: 호출 하나하나에 걸린 시간을 모아 끝에 적는다(--workers 1 로, 다른 무거운 작업 없이 돌려야 뜻이 있다)
@@ -18,7 +18,7 @@ public static class ModuleRun
     private const long Ticks = 60000;                       // 1초. 프레임 하나가 1000
     private const int PadTop = 4, PadRight = 8, PadStride = 16;
 
-    /// <summary>띠(BGR)를 모듈에 넘길 모양(BGRA, 위와 오른쪽에 남는 화소, 줄 끝 여백)으로 바꾼다.</summary>
+    /// <summary>띠(BGR)를 모듈에 넘길 형식(BGRA, 위와 오른쪽에 남는 화소, 줄 끝 여백)으로 바꾼다.</summary>
     internal sealed class Feeder
     {
         public readonly int Width = CaseInfo.BandWidth + PadRight, Height = CaseInfo.BandHeight + PadTop, Stride;
@@ -335,7 +335,7 @@ public static class ModuleRun
         Check("두 장만 넣고 마치면 Failed·NotEnoughFrames", module.Registration is { RequestId: 4, State: RegistrationStatus.Failed, Reason: "NotEnoughFrames" }, Now());
         Check("끝난 요청에 넣는 화면은 무시한다", Ignored(() => module.PushRegistrationFrame(4, feeder.Frame(q, 1, n + 1), feeder.Buffer)));
 
-        // 사라지면 직전 값(사용자 결정, 2026-11-14): 같은 값이 0.3초(네 장) 이어진 뒤 0.5초를 채우기 전에 점수가 사라진다
+        // 사라지면 직전 값(2026-11-14 에 정한 규칙): 같은 값이 0.3초(네 장) 이어진 뒤 0.5초를 채우기 전에 점수가 사라진다
         module.BeginRegistration(7, 1, At(), At() + 8 * Ticks);
         for (int i = 0; i < 4; i++) { q = Next(6); module.PushRegistrationFrame(7, feeder.Frame(q, 1, n), feeder.Buffer); }
         Check("같은 값 네 장(0.3초)까지는 아직 Reading", module.Registration is { RequestId: 7, State: RegistrationStatus.Reading }, Now());

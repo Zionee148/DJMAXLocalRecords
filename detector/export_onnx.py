@@ -5,7 +5,7 @@
   2) 그림 크기 맞추기를 다른 방식으로 해도 숫자열이 같은가 (.NET 에서 똑같이 구현하지 못했을 때의 위험)
   3) .NET 대조용 자료: 원본 크기로 잘라 낸 그림과, Python 이 그 그림에서 읽은 숫자열
 
-RIGHT 는 쓰지 않는다 (LEFT·CENTER 가 기준을 통과한 뒤에 본다는 사용자 결정).
+대조용 그림은 LEFT·CENTER 사례에서만 뽑는다. RIGHT 는 학습에 쓰지 않는 평가용이라, LEFT·CENTER 가 기준을 통과한 뒤에 본다.
 
 실행: .venv\\Scripts\\python.exe -m detector.export_onnx <실행 이름>
 출력: data\\runs\\<이름>\\reader.onnx, data\\parity\\crops.bin, letterboxed.bin, expected.tsv

@@ -2,7 +2,7 @@
 
 정답은 이 판독 모델과 무관하게 만든 것만 쓴다.
   - truth\\cases\\<사례>\\output\\frames*.csv : Windows OCR + 점수 규칙 + 이웃 대조로 만든 프레임별 정답 (docs\\SCORE-정답라벨-설계서.md)
-  - Codex 의 reviewed-source-labels\\<사례>.json : 확대 그림을 직접 읽은 검토 라벨 (프레임 일부)
+  - 검사 설정의 reviewed-source-labels\\<사례>.json : 확대 이미지를 직접 판독한 검토 라벨 (프레임 일부. 결과에는 "Codex 검토 라벨"로 적힌다)
 정답이 없는 프레임은 "정답 불명"으로 따로 세고, 맞았다고 치지 않는다.
 
 프레임별 출력은 두 가지로 잰다.
@@ -28,7 +28,7 @@ READ_CONF = 0.5
 
 
 def own_truth(case_id: str):
-    """우리 정답 라벨: 프레임 번호 → 값. 없으면 None."""
+    """Windows OCR 과 점수 규칙으로 만든 정답 라벨(truth 폴더): 프레임 번호 → 값. 없으면 None."""
     short = case_id.removesuffix("-actual")
     for path in (ROOT / "truth" / "cases" / case_id / "output" / "frames-v2.csv",
                  ROOT / "truth" / f"pilot-{short}" / "output" / "frames-v2.csv",
@@ -40,7 +40,7 @@ def own_truth(case_id: str):
 
 
 def codex_truth(case_id: str, pts: np.ndarray):
-    """Codex 검토 라벨. 프레임 번호의 시각이 우리 추출과 맞을 때만 쓴다."""
+    """확대 이미지를 직접 판독한 검토 라벨. 라벨에 적힌 프레임 시각이 이 판독의 프레임 시각(pts)과 맞을 때만 쓴다."""
     path = VALIDATION / "reviewed-source-labels" / f"{case_id}.json"
     if not path.exists():
         return None, ""
@@ -94,7 +94,7 @@ def main():
                     print(f"{case_id}: {source}")
                 continue
             truth = {i: v for i, v in truth.items() if i <= len(raw)}
-            # 산식으로 나올 수 없는 정답은 정답 쪽이 틀렸다는 신호다 (Codex 검토 라벨의 CYTUS CENTER 에서 16개 중 6개가 그랬다)
+            # 산식으로 나올 수 없는 정답은 정답 쪽이 틀렸다는 신호다 (검토 라벨의 CYTUS CENTER 에서 16개 중 6개가 그랬다)
             suspect = sum(1 for v in truth.values() if v > 0 and not on_lattice(v, notes_of(case_id)))
             row = {"사례": case_id, "정답 출처": source, "전체 프레임": len(raw), "정답 확인": len(truth), "정답 불명": len(raw) - len(truth),
                    "산식에 안 맞는 정답": suspect}

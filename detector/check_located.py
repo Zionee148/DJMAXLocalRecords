@@ -2,18 +2,19 @@
 
 점수 규칙은 읽은 값의 검산일 뿐이라 "규칙까지 통과한 틀린 값"은 규칙으로 잡히지 않는다. 여기서는 규칙 밖의 근거 셋과 견준다.
 
-  labels  정답 라벨과 견준다: 우리 정답(Windows OCR + 규칙으로 만든 두 사례)과 Codex 검토 라벨(확대 그림을 직접 읽은 100장).
-          고정 뒤 프레임만 센다. 라벨이 없는 프레임은 정답 미확인이다.
-  cross   같은 프레임을 다른 방식으로 읽은 실행과 견준다(예: Codex 영역으로 읽은 v17, 시제품이 찾은 자리로 읽은 vid-d2-v17-r).
+  labels  정답 라벨과 견준다: Windows OCR 과 점수 규칙으로 만든 두 사례의 라벨, 그리고 확대 이미지를 직접 판독한 100프레임의 검토 라벨
+          (출력에는 "Codex 검토 라벨"로 적힌다). 고정 뒤 프레임만 센다. 라벨이 없는 프레임은 정답 미확인이다.
+  cross   같은 프레임을 다른 방식으로 읽은 실행과 견준다(예: 비교 기준으로 사용한 영역(기준 영역)으로 읽은 v17, Python 도구 locate_video 가
+          찾은 자리로 읽은 vid-d2-v17-r).
           두 쪽이 모두 규칙을 통과했는데 값이 다르면 어느 한쪽은 규칙을 통과한 틀린 값이다. 판독기는 같으므로 판독기의 독립 검산은 아니고,
           자리를 스스로 찾아 자른 것이 값을 바꾸지 않는지를 본다.
   sample  사례마다 규칙을 통과한 프레임 한 장을 무작위로 뽑아, 모듈이 자른 자리를 크게 한 그림을 만든다. 그림에는 번호만 적고 값은 적지 않는다.
-          사람(또는 Claude)이 값을 모른 채 읽어 <그림 폴더>\\읽은값.tsv(번호, 읽은 값)에 적는다. 답은 <그림 폴더>\\key.json 에 따로 둔다.
+          검토자가 모듈이 읽은 값을 모른 채 읽어 <그림 폴더>\\읽은값.tsv(번호, 읽은 값)에 적는다. 답은 <그림 폴더>\\key.json 에 따로 둔다.
   score   읽은값.tsv 를 key.json 과 견준다.
 
 실행: .venv\\Scripts\\python.exe -m detector.check_located <모듈이 읽은 실행(vid-…)> labels
       .venv\\Scripts\\python.exe -m detector.check_located <모듈이 읽은 실행(vid-…)> cross <다른 실행> [출력 csv]
-      .venv\\Scripts\\python.exe -m detector.check_located <모듈이 읽은 실행(vid-…)> sample <그림 폴더> [씨앗=20261114]
+      .venv\\Scripts\\python.exe -m detector.check_located <모듈이 읽은 실행(vid-…)> sample <그림 폴더> [난수 시드=20261114]
       .venv\\Scripts\\python.exe -m detector.check_located <모듈이 읽은 실행(vid-…)> score <그림 폴더>
 """
 import csv

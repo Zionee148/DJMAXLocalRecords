@@ -1,26 +1,27 @@
 """원본 영상만으로 한 사례를 처음부터 끝까지 읽는다: 위치 찾기 → 영역 넓히기 → 모든 프레임 읽기 → 요약.
 
-locate_run·locate_full 은 영역 넓히기와 최종 판단에 Codex 가 뽑아 둔 0.5초 PNG 와 그것으로 만든 자료(data\\frames05b)를 쓴다.
-그래서 Codex 가 위치를 못 찾아 자료가 없는 사례(3-05 CENTER, welcome to the space)는 볼 수 없었다.
-여기서는 영상에서 화면 아래쪽 띠를 직접 뽑아 같은 일을 한다. Codex 폴더에서 읽는 것은 구간 시각(sources)과 기대 점수뿐이다.
+locate_run·locate_full 은 영역 넓히기와 최종 판단에 0.5초 간격의 기준 프레임(PNG)과 그것으로 만든 자료(data\\frames05b)를 쓴다.
+그 자료는 비교 기준으로 사용한 영역(기준 영역. 검사 설정에 적힌 점수 영역)으로 잘라 만들기 때문에, 기준 영역이 없는 사례
+(3-05 CENTER, welcome to the space)는 볼 수 없었다.
+여기서는 영상에서 화면 아래쪽 띠를 직접 뽑아 같은 일을 한다. 검사 설정에서 읽는 것은 구간 시각(sources)과 기대 점수뿐이다.
 
   1) 구간 처음부터 0.1초 간격 띠를 넣어 위치를 고정한다 (locate_run.locate. 위치·기어·점수를 알려 주지 않는다).
   2) 구간 전체의 0.5초 간격 띠로 고정 뒤의 영역 넓히기 내역을 구한다 (locate_run.read_whole_case 와 같은 규칙).
   3) 모든 프레임을 그 시각의 영역으로 잘라 읽는다 (locate_full.read_all_frames).
   4) full_summary 의 방식으로 요약한다. 고정 전 프레임은 읽지 않은 것으로 남는다.
 
-탐지 모델은 기어 90종 전부로 학습한 것(all.pt)을 쓴다. 3-05 CENTER 의 화면은 탐지 모델의 학습 자료에 없었다(Codex 영역이 없어서).
+탐지 모델은 기어 90종 전부로 학습한 것(all.pt)을 쓴다. 3-05 CENTER 의 화면은 탐지 모델의 학습 자료에 없었다(기준 영역이 없어서).
 
 실행: .venv\\Scripts\\python.exe -m detector.locate_video <탐지 이름> <판독 이름> <사례 ... | left | center | right>
       .venv\\Scripts\\python.exe -m detector.locate_video <탐지 이름> <판독 이름> --summary      (위치별 요약과 locate.csv)
-      .venv\\Scripts\\python.exe -m detector.locate_video <탐지 이름> <판독 이름> --normal <정상 프레임 목록의 실행> [Codex 영역으로 읽은 실행]
+      .venv\\Scripts\\python.exe -m detector.locate_video <탐지 이름> <판독 이름> --normal <정상 프레임 목록의 실행> [기준 영역으로 읽은 실행]
                                                                                     (LEFT·CENTER 를 정상 프레임 기준으로 셈. 끝에 right 를 붙이면 RIGHT.
-                                                                                     Codex 영역 판독이 없는 사례는 찾은 자리만 세고 견줌 칸을 비운다)
+                                                                                     기준 영역으로 읽은 판독이 없는 사례는 찾은 자리만 세고 견줌 칸을 비운다)
       .venv\\Scripts\\python.exe -m detector.locate_video <탐지 이름> <판독 이름> --steps <left | center>
                                                                                     (영역 내역만 다시 구해 <사례>.steps.json 으로. 모든 프레임을 읽지는 않는다)
 출력: data\\full\\vid-<탐지>-<판독>\\<사례>.npz 와 <사례>.json(그 사례의 결과 한 줄)
 
-RIGHT(사용자 결정, 2026-11-12 밤 "RIGHT도 포함"): 탐지 모델도 판독기도 RIGHT 녹화를 본 적이 없다. 한 번 돌려 숫자만 보고,
+RIGHT: 탐지 모델도 판독기도 RIGHT 녹화로 학습하지 않았다. 한 번 돌려 숫자만 보고,
 실패한 사례를 들여다보며 고치는 것은 LEFT·CENTER 를 마무리한 뒤에 한다.
 """
 import csv
@@ -72,7 +73,7 @@ def grow_steps(bands: np.ndarray, box_abs, lock_at: float, finder, reader, band_
     first_w = area[2] - area[0]
     steps = [(-1.0, tuple(area))]
     tops, bottoms = [area[1]], [area[3]]
-    seen_tops, seen_bottoms = [], []                          # 고정 뒤 영역 가까이에서 잡힌 모든 네모의 세로 (움직임을 알아보는 데 쓴다)
+    seen_tops, seen_bottoms = [], []                          # 고정 뒤 영역 가까이에서 잡힌 모든 검출 영역의 세로 (움직임을 알아보는 데 쓴다)
     waiting = None
 
     def in_band(a):
@@ -101,10 +102,10 @@ def grow_steps(bands: np.ndarray, box_abs, lock_at: float, finder, reader, band_
 
 @torch.no_grad()
 def follow_steps(bands: np.ndarray, steps: list, lock_at: float, finder, band_x0: int, seen) -> list:
-    """움직이는 점수판을 따라간다: 탐지 모델이 숫자 줄을 잡을 때마다 영역의 세로를 그 네모에 맞춘다. 가로는 grow_steps 가 정한 대로.
+    """움직이는 점수판을 따라간다: 탐지 모델이 숫자 줄을 잡을 때마다 영역의 세로를 그 검출 영역에 맞춘다. 가로는 grow_steps 가 정한 대로.
 
     읽어서 확인하지는 않는다(점수판이 옮겨 간 화면에서는 지금 영역이 안 읽혀 견줄 수 없다). 대신 옮겨 갈 수 있는 범위를 묶어 둔다:
-    고정 뒤에 잡힌 네모들이 오르내린 범위에서 네모 높이의 반 넘게 벗어난 네모는 따르지 않는다(위의 글자 줄로 옮겨 가지 않도록).
+    고정 뒤에 잡힌 검출 영역들이 오르내린 범위에서 그 높이의 반 넘게 벗어난 검출 영역은 따르지 않는다(위의 글자 줄로 옮겨 가지 않도록).
     """
     tops, bottoms = np.asarray(seen[0], float), np.asarray(seen[1], float)
     height = float(np.median(bottoms - tops))
@@ -144,7 +145,7 @@ def load_steps(out, case_id: str):
 
 
 def first_score(case_id: str):
-    """참고용: Codex 영역으로 읽은 옛 판독(v5, 269개 사례)에서 규칙을 통과한 첫 점수가 나온 시각(구간 시작 기준, 초).
+    """참고용: 기준 영역으로 읽은 옛 판독(v5, 269개 사례)에서 규칙을 통과한 첫 점수가 나온 시각(구간 시작 기준, 초).
 
     플레이가 시작된 시각의 라벨은 없다. 이것은 "고정이 첫 점수 뒤 몇 초였나"를 어림하는 데만 쓰고, 20초 기준의 판정이 아니다.
     """
@@ -180,14 +181,14 @@ def summary(out):
 
 
 def normal_check(out, masks_run: str, area_run: str, right: bool = False):
-    """찾은 자리로 읽은 결과를 정상 프레임 기준으로 센다 (LEFT·CENTER. 가림 판정은 Codex 영역으로 읽은 실행에서 만든 목록을 빌린다).
+    """찾은 자리로 읽은 결과를 정상 프레임 기준으로 센다 (LEFT·CENTER. 가림 판정은 기준 영역으로 읽은 실행에서 만든 목록을 빌린다).
 
     프레임 번호는 full_frames 와 같으므로(같은 구간을 같은 방식으로 뽑는다) 목록을 그대로 댈 수 있다. 고정 전의 프레임은 세지 않고 따로 적는다.
-    같은 프레임을 Codex 영역으로 읽은 실행(area_run)이 못 읽은 수도 나란히 낸다.
+    같은 프레임을 기준 영역으로 읽은 실행(area_run)이 못 읽은 수도 나란히 낸다. 출력과 CSV 열 이름의 "Codex 영역"이 그 실행의 값이다.
 
-    세는 사례: 정상 프레임 목록이 있는 사례 전부. Codex 영역으로 읽은 판독이 없는 사례(3-05 CENTER: Codex 영역이 없던 사례)는
-    찾은 자리의 수만 세고 견줌 칸을 비운다. 전에는 그런 사례를 통째로 건너뛰어 LEFT·CENTER 가 179개로만 세어졌다
-    (2026-11-17 리뷰 지적). 목록이 없어 세지 못한 사례와 견줌이 없는 사례는 이름을 찍는다.
+    세는 사례: 정상 프레임 목록이 있는 사례 전부. 기준 영역으로 읽은 판독이 없는 사례(3-05 CENTER: 기준 영역이 없던 사례)는
+    찾은 자리의 수만 세고 견줌 칸을 비운다. 전에는 그런 사례를 통째로 건너뛰어 LEFT·CENTER 가 179개로만 세어졌다.
+    목록이 없어 세지 못한 사례와 견줌이 없는 사례는 이름을 찍는다.
     """
     from .fever import normal_frames
     names = {c["id"]: c["name"] for c in json.loads((ROOT / "data" / "frames05b" / "cases.json").read_text(encoding="utf-8"))} \
@@ -278,7 +279,7 @@ def main():
             if only_steps:
                 continue
             (out / f"{case_id}.json").write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
-            print(f"[{n}/{len(wanted)}] {case_id}: 고정 못 함 (줄기 {tracks}개)", flush=True)
+            print(f"[{n}/{len(wanted)}] {case_id}: 고정 못 함 (추적 후보 {tracks}개)", flush=True)
             continue
         box_abs = lock_area(box, x0) if known is None else box; lock_at = lock_frame / FPS
         steps, moving = [(-1.0, tuple(box_abs))], False

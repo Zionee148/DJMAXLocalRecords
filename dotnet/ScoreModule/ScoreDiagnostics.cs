@@ -1,9 +1,9 @@
-// SCORE 진단 기록 (기획서 v3 기능 7절). 글자 기록만 맡는다. 한 줄에 사건 하나(JSON).
+// SCORE 진단 기록 (기획서 v3 기능 7절). 텍스트 기록만 맡는다. 진단 이벤트를 한 줄에 하나씩 JSON 으로 기록한다.
 //
 //   - 개인 점수 기록과 다른 폴더(실행 파일 옆 diagnostics)에 따로 둔다. 점수 기록을 읽거나 바꾸지 않는다. 어디로도 보내지 않는다.
 //   - 파일 하나가 FileLimit 를 넘으면 다음 번호의 파일로 넘어가고, 합계가 TotalLimit 를 넘으면 오래된 파일부터 지운다.
 //   - 지우는 것은 이 클래스가 만든 파일(score-번호.log)뿐이다.
-//   - 기록하다 생긴 오류는 삼킨다(진단 기록 때문에 앱이 멈추면 안 된다). 마지막 오류는 LastError 에 남긴다.
+//   - 기록에 실패하면 오류 메시지를 LastError 에 저장하고 앱 실행을 계속한다(진단 기록 때문에 앱이 멈추면 안 된다). 다음 기록이 성공하면 LastError 를 지운다.
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
@@ -36,7 +36,7 @@ public sealed class ScoreDiagnostics
         new DirectoryInfo(_folder).EnumerateFiles("score-*.log").Select(f => (Match: Ours.Match(f.Name), File: f)).Where(x => x.Match.Success)
             .Select(x => (int.Parse(x.Match.Groups[1].Value, CultureInfo.InvariantCulture), x.File)).OrderBy(x => x.Item1).ToList();
 
-    /// <summary>사건 하나를 적는다. fields 는 이름 붙은 값들(익명 형식).</summary>
+    /// <summary>진단 이벤트 하나를 적는다. kind 는 이벤트 이름, fields 는 이름 붙은 값들(익명 형식).</summary>
     public void Write(string kind, object fields)
     {
         try

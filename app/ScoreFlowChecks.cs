@@ -60,10 +60,10 @@ static partial class ScoreReplayChecks
    var selA=new Selection(song,8,"SC","노말",0);var selB=new Selection(song,8,"MAXIMUM","노말",0);
    if(store.Get(selA)!=null||store.Get(selB)!=null)throw new Exception("시험 폴더에 이미 기록이 있습니다. 깨끗한 폴더에서 돌려야 합니다.");
 
-   // 창이 떠 있는 동안의 조작을 대신 해 주는 일꾼: 차례로, 조건이 될 때까지 기다렸다가 한다.
+   // 창이 떠 있는 동안의 조작을 대신 하는 자동 조작 타이머: 예약한 조작을 차례로, 조건이 될 때까지 기다렸다가 실행한다.
    var robot=new LinkedList<Func<bool>>();
    using var hands=new System.Windows.Forms.Timer(){Interval=30};
-   hands.Tick+=(_,_)=>{if(robot.First is not {} node)return;var step=node.Value;robot.RemoveFirst();try{if(!step())robot.AddFirst(step);}catch(Exception e){notes.Add("일꾼 오류: "+(e.InnerException??e).Message);robot.Clear();}};
+   hands.Tick+=(_,_)=>{if(robot.First is not {} node)return;var step=node.Value;robot.RemoveFirst();try{if(!step())robot.AddFirst(step);}catch(Exception e){notes.Add("자동 조작 오류: "+(e.InnerException??e).Message);robot.Clear();}};
    hands.Start();
 
    async Task Until(Func<bool> condition,double seconds,string what){var watch=Stopwatch.StartNew();while(!condition()){if(watch.Elapsed.TotalSeconds>seconds)throw new TimeoutException("기다리다 시간이 넘음: "+what);await Task.Delay(20);}}
@@ -248,7 +248,7 @@ static partial class ScoreReplayChecks
     Check("확인하면 요청 때의 프로필에 저장됨",Same()&&Value(selA)==expected,Value(selA));
     bool opened=false;
     robot.AddLast(()=>{var f=FindForm("프로필 이름");if(f==null)return false;opened=true;((Button)f.CancelButton!).PerformClick();return true;});
-    status.Text="";Find("이름 변경").PerformClick();   // 이제는 막히지 않는다: 창이 뜨고, 일꾼이 취소를 누른다
+    status.Text="";Find("이름 변경").PerformClick();   // 이제는 막히지 않는다: 창이 뜨고, 자동 조작이 취소를 누른다
     Check("확인이 끝난 뒤에는 이름 변경 창이 다시 열림",opened&&Same()&&status.Text!=Guard,status.Text);
     await Task.Delay(100);
    }

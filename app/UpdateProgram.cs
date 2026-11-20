@@ -128,7 +128,7 @@ static class UpdateProgram
      UpdateSwap.RemoveFolder(backupDir);
      paths.WriteState(state with{Phase="rolled-back",At=UpdatePaths.Now,Note=swap.Error});
      Release(ref mutex);
-     w.Notice("업데이트 실패","프로그램 파일을 바꾸지 못해 기존 버전으로 되돌렸습니다.\n까닭: "+swap.Error+"\n\n프로그램과 기록은 업데이트하기 전 그대로입니다. 확인을 누르면 기존 버전을 다시 켭니다.");
+     w.Notice("업데이트 실패","프로그램 파일을 바꾸지 못해 기존 버전으로 되돌렸습니다.\n실패 원인: "+swap.Error+"\n\n프로그램과 기록은 업데이트하기 전 그대로입니다. 확인을 누르면 기존 버전을 다시 켭니다.");
      if(Start(paths) is {} old)old.Dispose();
     }
     else Broken(w,paths,state,backupDir,swap);
@@ -191,7 +191,7 @@ static class UpdateProgram
     if(Start(paths) is {} old2)old2.Dispose();
    }
    else if(swap.Restored)
-    w.Notice("업데이트","이전 버전으로 되돌리지 못했습니다. 새 버전의 파일은 그대로 있습니다.\n까닭: "+swap.Error+"\n\n"+UpdateBackup.HowToRestore(backupDir));
+    w.Notice("업데이트","이전 버전으로 되돌리지 못했습니다. 새 버전의 파일은 그대로 있습니다.\n실패 원인: "+swap.Error+"\n\n"+UpdateBackup.HowToRestore(backupDir));
    else Broken(w,paths,state,backupDir,swap);
   }
   finally{Release(ref mutex);}
@@ -200,7 +200,7 @@ static class UpdateProgram
  static void Broken(InstallWindow w,UpdatePaths paths,UpdateState state,string backupDir,SwapResult swap)
  {
   try{paths.WriteState(state with{Phase="broken",At=UpdatePaths.Now,Note=swap.Error});}catch(IOException){}catch(UnauthorizedAccessException){}
-  w.Notice("업데이트 실패","프로그램 파일을 바꾸다 실패했고, 되돌리지도 못했습니다. 프로그램 파일이 섞여 있을 수 있습니다.\n까닭: "+swap.Error+"\n되돌리지 못한 것: "+swap.RestoreError
+  w.Notice("업데이트 실패","프로그램 파일을 바꾸다 실패했고, 되돌리지도 못했습니다. 프로그램 파일이 섞여 있을 수 있습니다.\n실패 원인: "+swap.Error+"\n복구 중 발생한 오류: "+swap.RestoreError
    +"\n\n기록과 설정은 건드리지 않았습니다.\n"+UpdateBackup.HowToCopyBack(backupDir));
  }
  /// <summary>이번 시도가 만든 백업 폴더(아직 프로그램 파일이 옮겨지지 않은 것)를 지운다.</summary>
@@ -281,9 +281,9 @@ static class UpdateProgram
     if(swap.Restored)
     {
      Release(ref mutex);
-     w.Notice("이전 버전 복구","프로그램 파일을 바꾸지 못해 되돌리지 않았습니다. 지금 버전 그대로입니다.\n까닭: "+swap.Error);
+     w.Notice("이전 버전 복구","프로그램 파일을 바꾸지 못해 되돌리지 않았습니다. 지금 버전 그대로입니다.\n실패 원인: "+swap.Error);
     }
-    else w.Notice("이전 버전 복구","프로그램 파일을 바꾸다 실패했고, 원래대로 돌려놓지도 못했습니다. 프로그램 파일이 섞여 있을 수 있습니다.\n까닭: "+swap.Error+"\n되돌리지 못한 것: "+swap.RestoreError
+    else w.Notice("이전 버전 복구","프로그램 파일을 바꾸다 실패했고, 원래대로 돌려놓지도 못했습니다. 프로그램 파일이 섞여 있을 수 있습니다.\n실패 원인: "+swap.Error+"\n원래대로 돌려놓는 중 발생한 오류: "+swap.RestoreError
      +"\n\n기록과 설정은 건드리지 않았습니다.\n"+UpdateBackup.HowToCopyBack(backupDir));
     return;
    }
@@ -297,7 +297,7 @@ static class UpdateProgram
  }
 }
 
-/// <summary>프로그램이 보통으로 켜졌을 때 지난 업데이트의 뒷정리를 한다.</summary>
+/// <summary>프로그램이 보통으로 켜졌을 때 지난 업데이트의 상태 파일을 보고 결과를 확정하고, 남은 임시 폴더와 지난 백업을 정리한다.</summary>
 static class UpdateStartup
 {
  /// <summary>주 화면이 뜬 뒤에 부른다. Note 는 업데이트 줄에 보일 짧은 글, Notice 는 창으로 알릴 글(둘 다 없을 수 있다).</summary>
@@ -365,8 +365,8 @@ static class UpdateStartup
  internal static int CleanPause=2000;   // 다시 해 보는 사이(밀리초)
  static readonly object CleanGate=new();
  static (CancellationTokenSource Stop,Task Work)? cleaning;
- /// <summary>뒷정리를 멈추고 끝나기를 기다린다. 돌아온 뒤에는 뒷정리가 아무것도 지우지 않는다.
- /// 새 업데이트를 준비하기 전에 부른다(뒷정리와 준비가 같은 자리 download, staging 을 쓴다).</summary>
+ /// <summary>CleanLater 가 시작한 임시 폴더 정리를 멈추고 끝나기를 기다린다. 돌아온 뒤에는 그 정리가 아무것도 지우지 않는다.
+ /// 새 업데이트를 준비하기 전에 부른다(임시 폴더 정리와 준비가 같은 자리 download, staging 을 쓴다).</summary>
  internal static void StopCleaning()
  {
   (CancellationTokenSource Stop,Task Work)? running;

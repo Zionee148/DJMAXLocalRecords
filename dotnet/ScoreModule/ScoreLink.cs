@@ -7,7 +7,7 @@
 //   - 진단 기록: 판의 시작, 자리 고정(걸린 시간), 재시작 판단, 요청과 답을 남긴다.
 //
 // 스레드: 이 클래스의 메서드는 모두 한 스레드(앱에서는 화면 스레드)에서 부른다. 모듈을 부르는 일은 IScoreRunner 가 돌린다
-// (앱에서는 작업 스레드 하나, 시험에서는 가짜 시계). 모듈 호출은 줄을 세워 하나씩만 돌리므로 모듈은 한 번에 한 곳에서만 불린다.
+// (앱에서는 작업 스레드 하나, 시험에서는 가짜 시계). ScoreLink 는 모듈 호출을 대기열에 넣어 한 번에 하나씩 차례로 요청하므로 모듈은 한 번에 한 곳에서만 불린다.
 // 모듈이 알려 준 것(자리, 재시작, 답)은 일이 끝난 뒤 부른 쪽 스레드에서 전한다.
 namespace DjmaxScore;
 
@@ -55,7 +55,7 @@ public sealed class ScoreLink : IDisposable
     }
     private Open? _open;
 
-    /// <summary>모델이나 실행 라이브러리를 못 읽었으면 그 까닭. 쓸 수 있으면 null.</summary>
+    /// <summary>모델이나 실행 라이브러리를 못 읽었으면 그 사유. 쓸 수 있으면 null.</summary>
     public string? Unavailable { get; }
     public bool Available => _module is not null;
     /// <summary>판 번호. 새 판을 열 때와 같은 곡을 다시 시작했다고 볼 때마다 오른다.</summary>
@@ -92,7 +92,7 @@ public sealed class ScoreLink : IDisposable
 
     // ---------- 판 ----------
 
-    /// <summary>판의 열쇠(Steam 곡 정보)나 기어 위치가 지금 판과 다를 때만 새 판을 연다. 같으면 아무 일도 하지 않는다(쌓인 근거를 지우지 않는다).</summary>
+    /// <summary>판을 구분하는 키(Steam 곡 정보)나 기어 위치가 지금 판과 다를 때만 새 판을 연다. 같으면 아무 일도 하지 않는다(쌓인 근거를 지우지 않는다).</summary>
     public void EnsurePlay(string key, GearPosition gear, string why)
     {
         if (_playKey == key && _gear == gear) return;
@@ -226,7 +226,7 @@ public sealed class ScoreLink : IDisposable
         Post(() => _module.Poll(now));
     }
 
-    // ---------- 줄 세우기 ----------
+    // ---------- 대기열: 모듈 호출을 한 번에 하나씩 차례로 처리 ----------
 
     private void Post(Action work)
     {

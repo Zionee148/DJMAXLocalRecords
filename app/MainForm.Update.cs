@@ -4,7 +4,7 @@ namespace LadderRecords;
 // 내려받기·교체·복구의 실제 일은 Update*.cs 에 있다. 기획서: docs\plans\20261116-자동업데이트-기획서.md
 partial class MainForm
 {
- /// <summary>개발용 검사가 주 화면을 띄울 때는 끈다(검사가 인터넷에 묻거나 지난 업데이트의 뒷정리를 하지 않게).</summary>
+ /// <summary>개발용 검사가 주 화면을 띄울 때는 끈다(검사 중에는 새 버전을 조회하거나 이전 업데이트의 상태 파일·임시 폴더·지난 백업을 정리하지 않는다).</summary>
  internal static bool UpdateFeatures=true;
 
  readonly Button updateCheck=new(){Text="업데이트 확인",AutoSize=true},updateRestore=new(){Text="이전 버전 복구",AutoSize=true,Visible=false};
@@ -29,7 +29,7 @@ partial class MainForm
  }
  void Note(string text,string tag){updateNote.Text=text;updateNote.Tag=tag;updateNote.ForeColor=Theme.For(updateNote);}
 
- /// <summary>주 화면이 뜬 뒤 한 번: 지난 업데이트의 뒷정리를 하고, 새 버전이 있는지 한 번 알아본다. 켜 둔 동안 다시 알아보지 않는다.</summary>
+ /// <summary>주 화면이 뜬 뒤 한 번: 지난 업데이트의 상태 파일을 보고 임시 폴더와 지난 백업을 정리한 다음(UpdateStartup.Resolve), 새 버전이 있는지 한 번 알아본다. 켜 둔 동안 다시 알아보지 않는다.</summary>
  void StartUpdateFeatures()
  {
   if(!UpdateFeatures)return;
@@ -40,8 +40,8 @@ partial class MainForm
    ShowRestore();
    if(notice!=null)NoticeDialog.Show(this,"업데이트",notice);
   }
-  // 지난 업데이트의 뒷정리가 실패해도 프로그램은 떠야 한다
-  catch(Exception e){updatePaths.Log("켤 때의 뒷정리 오류: "+e.Message);Note(VersionText+" · 지난 업데이트의 상태를 읽지 못함","warn");}
+  // 지난 업데이트의 상태 확인과 정리가 실패해도 프로그램은 떠야 한다
+  catch(Exception e){updatePaths.Log("프로그램 시작 시 이전 업데이트 정리 실패: "+e.Message);Note(VersionText+" · 지난 업데이트의 상태를 읽지 못함","warn");}
   if(!UpdateOff)CheckUpdate(false);
  }
  void ShowRestore()
@@ -93,7 +93,7 @@ partial class MainForm
   finally{updateChecking=false;if(!IsDisposed)updateCheck.Enabled=!updating;}
  }
 
- /// <summary>지금 업데이트(또는 복구)를 시작하면 안 되는 까닭. 시작해도 되면 null. 등록 후보를 대신 저장하거나 취소하지 않는다: 사용자가 먼저 끝내야 한다.</summary>
+ /// <summary>지금 업데이트(또는 복구)를 시작할 수 없는 사유(사용자에게 그대로 보여 준다). 시작해도 되면 null. 등록 후보를 대신 저장하거나 취소하지 않는다: 사용자가 먼저 끝내야 한다.</summary>
  string? UpdateBlocker(string action="업데이트")
  {
   if(activeRegistration!=null||session.Pending!=null)return $"점수 확인이나 저장 확인이 진행 중입니다.\n저장 또는 취소를 먼저 끝낸 뒤 {action}해 주세요.";
@@ -132,7 +132,7 @@ partial class MainForm
    status.Text="업데이트하려고 프로그램을 끝냅니다.";
    Close();return;
   }
-  // 교체 전에 멈췄다: 프로그램도 기록도 바뀌지 않았다. 남긴 것을 치우고 조작 제한을 푼다
+  // 교체 전에 멈췄다: 프로그램도 기록도 바뀌지 않았다. 상태 파일, 내려받아 풀어 놓은 파일, 이번에 만든 백업 폴더를 지우고 조작 제한을 푼다
   updatePaths.ClearState();UpdatePrepare.Clear(updatePaths);if(backup!=null)UpdateProgram.RemoveNewBackup(updatePaths,backup);
   updating=false;store.Frozen=false;updateCheck.Enabled=!UpdateOff;
   if(progress.Cancelled)
@@ -143,7 +143,7 @@ partial class MainForm
   }
   else
   {
-   string why=progress.Failure??"알 수 없는 까닭으로 멈췄습니다.";
+   string why=progress.Failure??"알 수 없는 원인으로 멈췄습니다.";
    updatePaths.Log("교체 전에 실패: "+why);
    status.Text="업데이트 실패";
    NoticeDialog.Show(this,"업데이트 실패",why+$"\n\n지금 버전({AppVersion.Text(AppVersion.Current)})을 계속 사용합니다. 프로그램과 기록은 바뀌지 않았습니다.\n잠시 뒤에 [업데이트 확인]으로 다시 해 볼 수 있습니다.");

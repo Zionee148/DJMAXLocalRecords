@@ -1,8 +1,8 @@
 using System.Text.Json;
 namespace LadderRecords;
-// 기록 파일의 보호 두 가지를 본다(2026-11-16, 리뷰 docs\reviews\20261115-저장되돌리기-보호검증-리뷰.md 의 1·2번).
+// 기록 파일의 보호 두 가지를 검사한다(2026-11-16, 리뷰 docs\reviews\20261115-저장되돌리기-보호검증-리뷰.md 의 1·2번).
 //  1. 프로그램 밖에서 바뀌었거나 사라진 기록 파일은 덮어쓰지 않는다
-//  2. 본 파일이 없는데 백업이나 저장하다 만 파일이 남아 있으면 빈 기록으로 시작하지 않는다
+//  2. 본 파일(records.json)이 없는데 백업(.bak)이나 저장 도중에 남은 임시 파일(.tmp)이 있으면 빈 기록으로 시작하지 않는다
 // 합성 기록만 쓰고, 실행 파일 옆의 test-data 아래에만 쓴다. 결과는 store-guard-validation.txt
 static class StoreGuardTests
 {
@@ -16,7 +16,7 @@ static class StoreGuardTests
   RecordStore Seed(string path){var s=new RecordStore(path);s.Put(hard,90m,measuredAt:time,rawScore:900000);s.Put(hard,91m,measuredAt:time.AddMinutes(1),rawScore:910000);return s;}
   string State(RecordStore s)=>JsonSerializer.Serialize(s.Data);
   bool Same(string path,byte[] bytes)=>File.Exists(path)&&File.ReadAllBytes(path).SequenceEqual(bytes);
-  // 밖에서 바뀐 것을 알아채 막았는가: 막는 예외가 나고, 메모리·저장 횟수·본 파일·백업이 그대로이고, 임시 파일이 남지 않는다
+  // 밖에서 바뀐 것을 알아채 막았는가: 저장을 막는 예외(RecordFileChangedException)가 나고, 메모리·저장 횟수·본 파일·백업이 그대로이고, 임시 파일이 남지 않는다
   void Blocked(string name,RecordStore s,string path,Action act,byte[]? main,byte[]? backup)
   {
    string before=State(s);long revision=s.Revision;Exception? caught=null;
@@ -83,7 +83,7 @@ static class StoreGuardTests
    Blocked("파일 없이 시작한 뒤 파일이 생김",s,path,()=>s.Put(hard,98m,rawScore:980000),foreign,null);
   }
   {
-   // 다른 쪽이 본 파일을 고치려고 열어 둔 동안에는 저장이 실패하고(막는 예외가 아니라 보통의 파일 오류), 닫히면 한 번만 저장된다
+   // 다른 프로그램이 본 파일을 고치려고 열어 둔 동안에는 저장이 실패하고(RecordFileChangedException 이 아니라 보통의 파일 오류 IOException), 닫히면 한 번만 저장된다
    string path=At("being-written");var s=Seed(path);string before=State(s);long revision=s.Revision;byte[] main=File.ReadAllBytes(path);Exception? caught=null;
    using(new FileStream(path,FileMode.Open,FileAccess.ReadWrite,FileShare.ReadWrite|FileShare.Delete)){try{s.Put(hard,98m,rawScore:980000);}catch(Exception e){caught=e;}}
    Check(caught is IOException and not RecordFileChangedException&&State(s)==before&&s.Revision==revision&&Same(path,main),"다른 쪽이 쓰려고 연 동안: 저장 실패, 메모리·본 파일 그대로");

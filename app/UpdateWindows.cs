@@ -77,7 +77,7 @@ class UpdateProgressDialog:CompactDialog
  readonly CancellationTokenSource source=new();
  bool locked,finished;
  public Func<UpdateProgressDialog,CancellationToken,Task>? Work;
- /// <summary>실패한 까닭(있으면). 취소했으면 Cancelled, 끝까지 갔으면 Completed.</summary>
+ /// <summary>실패 사유(실패했을 때만 값이 있다). 취소했으면 Cancelled, 끝까지 갔으면 Completed.</summary>
  public string? Failure{get;private set;}
  public bool Cancelled{get;private set;}
  public bool Completed{get;private set;}

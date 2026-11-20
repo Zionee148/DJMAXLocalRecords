@@ -11,7 +11,7 @@ public sealed class Picture
 
     public bool Empty => Height <= 0 || Width <= 0;
 
-    /// <summary>네모 둘레에 여백을 두고 자른 조각. 그림 밖은 잘라 낸다.</summary>
+    /// <summary>영역(Box) 둘레에 여백을 두고 자른 조각. 그림 밖은 잘라 낸다.</summary>
     public Picture Part(Box box, int marginX = Margin.X, int marginY = Margin.Y)
     {
         int xa = Math.Max(0, Numbers.Round(box.X0) - marginX), ya = Math.Max(0, Numbers.Round(box.Y0) - marginY);
@@ -101,7 +101,7 @@ public sealed class Picture
     }
 }
 
-/// <summary>판독기에 넣을 조각을 자를 때 네모 둘레에 두는 여백(화소). 판독기가 이 여백으로 자른 조각을 배웠다.</summary>
+/// <summary>판독기에 넣을 조각을 자를 때 영역(Box) 둘레에 두는 여백(화소). 판독기를 이 여백으로 자른 조각으로 학습했다.</summary>
 public static class Margin
 {
     public const int X = 14, Y = 8;

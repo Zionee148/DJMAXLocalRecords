@@ -23,10 +23,10 @@ partial class MainForm:AppWindow
   this.catalog=catalog;
   InitScore();
  optionsPath=preferencesPath??Path.Combine(AppContext.BaseDirectory,"preferences.json");{var options=UserOptions.Load(optionsPath);fullscreen.Checked=options.Fullscreen;scoreImagesOption.Checked=options.DiagnosticImages;Theme.Dark=options.Dark;}session.Valid=c=>catalog.Songs.Any(s=>s.Id==c.SongId&&s.Charts.Contains(new(c.Button,c.Pattern)));recognition=new(catalog);server=new(port,OverlayText.Titles(catalog));LoadAppearance();Text="디맥 개인 기록 저장 오버레이";ClientSize=new(720,600);Font=Theme.Px("맑은 고딕",10);hotkeys=new(Handle,registerHotkeys);HandleCreated+=(_,_)=>{if(hotkeys!=null)try{hotkeys.Rebind(Handle);}catch(Exception e){status.Text=e.Message;}};HandleDestroyed+=(_,_)=>hotkeys?.Detach();
-  // 두 칸(사용자 결정, 2026-11-15). 왼쪽은 조작을 쓰는 순서대로 묶고, 오른쪽은 곡 정보·게임 화면·SCORE·상태를 보여 준다. 색과 단추 모양은 Theme 가 입힌다
+  // 주 화면은 좌우 두 칸이다. 왼쪽 칸에는 조작 컨트롤을 쓰는 순서대로 묶어 두고, 오른쪽 칸에는 곡 정보·게임 화면·SCORE·상태를 보여 준다. 색과 단추 모양은 Theme 가 적용한다
   const int ContentWidth=480,LeftWidth=540;
   var root=new TableLayoutPanel(){Dock=DockStyle.Fill,AutoScroll=true,ColumnCount=2,RowCount=1,Padding=Padding.Empty};root.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));root.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-  // 부품을 하나 붙일 때마다 창 전체의 배치를 다시 잡지 않게, 다 만들 때까지 멈췄다가 끝에 한 번만 잡는다(잰 값: 1.5초 → docs\기록\최적화.md)
+  // 컨트롤을 하나 추가할 때마다 창 전체의 레이아웃을 다시 계산하지 않게, 모두 추가할 때까지 멈췄다가 끝에 한 번만 계산한다(잰 값: 1.5초 → docs\기록\최적화.md)
   SuspendLayout();root.SuspendLayout();Controls.Add(root);scrollArea=root;
   var left=new FlowLayoutPanel(){AutoSize=true,FlowDirection=FlowDirection.TopDown,WrapContents=false,Margin=Padding.Empty,Padding=new(18,12,18,12)};
   var right=new SidePanel(){AutoSize=true,FlowDirection=FlowDirection.TopDown,WrapContents=false,Margin=Padding.Empty,Padding=new(19,12,18,12),Dock=DockStyle.Fill};
@@ -76,7 +76,7 @@ partial class MainForm:AppWindow
    // 처음 뜨는 크기는 뜬 뒤에 길어지는 글(SCORE 상태 두 줄, 상태 두 줄, 가장 긴 등록 실패 안내)이 들어갈 만큼으로 잡는다.
    // 뜰 때의 짧은 글에 맞추면 글이 길어지는 순간 내용이 창보다 커져 세로 스크롤이 생기고, 그 막대가 너비를 먹어 가로 스크롤까지 생긴다.
    // 게임 화면이 1920×1080 이 아닐 때 SCORE 상태에 붙는 긴 안내까지는 넣지 않는다(그때는 스크롤이 생길 수 있다).
-   // 글을 하나 바꿀 때마다 배치를 다시 잡지 않게, 셋을 다 바꾼 뒤 한 번 잡고 크기를 읽는다. 되돌릴 때도 같다.
+   // 글을 하나 바꿀 때마다 레이아웃을 다시 계산하지 않게, 셋을 다 바꾼 뒤 한 번 계산하고 크기를 읽는다. 되돌릴 때도 같다.
    var growing=new[]{scoreStatus,status,scoreAdvice};var kept=growing.Select(l=>l.Text).ToArray();
    var held=Theme.Hold(root);
    scoreStatus.Text="가\n가";status.Text="가\n가";
@@ -201,7 +201,7 @@ partial class MainForm:AppWindow
   }catch(JsonException){}catch(IOException){}
  }
  void EditAppearance(){using var d=new StyleDialog(appearance,catalog,showCurrent.Checked,hotkeys.Items);if(d.ShowDialog(this)==DialogResult.OK){appearance=d.Value;File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"appearance.json"),appearance.GetRawText());RefreshState();}}
- // 프로세스마다 주 창을 물으면(Process.MainWindowHandle) 그때마다 화면의 모든 창을 훑어 프로세스 300개에 0.3초가 든다(잰 값. docs\기록\최적화.md).
+ // 프로세스마다 주 창을 조회하면(Process.MainWindowHandle) 그때마다 화면의 모든 창을 훑어 프로세스 300개에 0.3초가 든다(잰 값. docs\기록\최적화.md).
  // 창을 한 번만 훑어 프로세스별 주 창을 모은다. 주 창의 기준은 .NET 과 같다: 주인이 없고 보이는 최상위 창 가운데 맨 앞의 것. 목록의 순서도 전처럼 프로세스 순서다.
  delegate bool EachWindow(IntPtr h,IntPtr l);
  [DllImport("user32.dll")]static extern bool EnumWindows(EachWindow each,IntPtr l);[DllImport("user32.dll")]static extern uint GetWindowThreadProcessId(IntPtr h,out uint process);[DllImport("user32.dll")]static extern bool IsWindowVisible(IntPtr h);[DllImport("user32.dll")]static extern IntPtr GetWindow(IntPtr h,uint relation);

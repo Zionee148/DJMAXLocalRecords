@@ -91,7 +91,7 @@ public sealed class ScoreReader : IDisposable
             if (best != last && best != Blank) digits.Add(best);
             last = best;
         }
-        // 그 숫자열이 나오는 모든 경로의 확률을 더한다 (사이사이에 빈칸을 끼운 줄을 따라가는 앞으로 셈)
+        // 그 숫자열이 나오는 모든 경로의 확률을 더한다 (숫자 사이사이에 빈칸을 끼운 라벨열에 대한 CTC 전방 계산)
         int n = digits.Count, size = 2 * n + 1;
         var alpha = new double[size];
         var next = new double[size];

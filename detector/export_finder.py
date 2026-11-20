@@ -1,8 +1,8 @@
-"""숫자 줄 탐지 모델을 ONNX 로 내보내고, .NET 에 넣어도 같은 네모가 나오는지 확인할 자료를 만든다.
+"""숫자 줄 탐지 모델을 ONNX 로 내보내고, .NET 에 넣어도 같은 검출 영역이 나오는지 확인할 자료를 만든다.
 
-  1) 내보낸 모델(ONNX Runtime, CPU)이 원래 모델과 같은 네모를 내는가
+  1) 내보낸 모델(ONNX Runtime, CPU)이 원래 모델과 같은 검출 영역을 내는가
   2) CPU 로 띠 한 장(340x960)을 보는 데 걸리는 시간 (모듈은 그래픽 카드를 쓰지 않는다)
-  3) .NET 대조용 자료: 띠 그림과, Python 이 그 그림에서 낸 네모
+  3) .NET 대조용 자료: 띠 그림과, Python 이 그 그림에서 낸 검출 영역
 
 띠는 LEFT·CENTER 녹화에서 뽑는다 (RIGHT 는 쓰지 않는다).
 
@@ -30,7 +30,7 @@ PER_CASE = 12        # 사례마다 띠 몇 장 (구간에 고르게)
 
 
 def boxes_from(prob: np.ndarray, dist: np.ndarray, threshold: float = 0.5) -> list[tuple]:
-    """find_rows 와 같은 뒤처리(모델 출력 → 네모). ONNX 출력에도 똑같이 쓰려고 떼어 놓았다."""
+    """find_rows 와 같은 뒤처리(모델 출력 → 검출 영역). ONNX 출력에도 똑같이 쓰려고 떼어 놓았다."""
     import cv2
     mask = (prob >= threshold).astype(np.uint8)
     count, labels, _, _ = cv2.connectedComponentsWithStats(mask, 8)
@@ -77,7 +77,7 @@ def main():
     exported = [run_onnx(session, b) for b in bands]
     differ = sum(len(a) != len(b) for a, b in zip(usual, exported))
     worst = max((abs(x - y) for a, b in zip(usual, exported) if len(a) == len(b) for p, q in zip(a, b) for x, y in zip(p[:4], q[:4])), default=0.0)
-    print(f"1) 원래 모델과 내보낸 모델: 네모 수가 다른 띠 {differ} / {len(bands)}, 네모 좌표의 가장 큰 차이 {worst:.4f}화소 (네모 {sum(len(a) for a in usual)}개)")
+    print(f"1) 원래 모델과 내보낸 모델: 검출 영역 수가 다른 띠 {differ} / {len(bands)}, 검출 영역 좌표의 가장 큰 차이 {worst:.4f}화소 (검출 영역 {sum(len(a) for a in usual)}개)")
 
     for threads in (0, 1):
         options = ort.SessionOptions()
@@ -95,7 +95,7 @@ def main():
     with open(PARITY / "bands.bin", "wb") as f:                              # 장수, 높이, 너비, 그리고 화소(RGB)
         f.write(struct.pack("<iii", len(bands), bands.shape[1], bands.shape[2])); f.write(bands.tobytes())
     lines = []
-    for b in exported:                                                       # 띠마다 한 줄: 네모 수, 그리고 네모마다 x0 y0 x1 y1 점수
+    for b in exported:                                                       # 띠마다 한 줄: 검출 영역 수, 그리고 검출 영역마다 x0 y0 x1 y1 평균 확률
         lines.append("\t".join([str(len(b))] + [f"{v:.4f}" for box in b for v in box]))
     (PARITY / "expected.tsv").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print(f".NET 대조용 자료: {PARITY}")

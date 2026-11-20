@@ -9,7 +9,7 @@ namespace LadderRecords;
 //     폴더 이름은 "날짜-시각-request-번호"다. 글자 진단 기록(score-번호.log)의 request 번호와 맞춰 볼 수 있다.
 //   - diagnostics\images 아래에 합쳐서 Limit(200MB)까지 남기고, 넘으면 오래된 요청부터 지운다.
 //     지우는 것은 이 클래스가 만든 폴더(이름이 위 규칙에 맞는 것) 안의 그림뿐이다. 다른 파일은 건드리지 않는다.
-//   - 그림을 만드는 일은 화면 스레드를 막지 않게 뒤에서 차례로 한다. 오류는 삼키고 LastError 에 남긴다. 어디로도 보내지 않는다.
+//   - 그림을 만드는 일은 화면 스레드를 막지 않게 뒤에서 차례로 한다. 오류가 나면 메시지를 LastError 에 저장하고 계속한다. 그림은 어디로도 보내지 않는다.
 sealed class ScoreImageLog
 {
  public const long DefaultLimit=200L*1024*1024;

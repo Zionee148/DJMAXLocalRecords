@@ -2,21 +2,21 @@ using System.Drawing.Drawing2D;
 using System.Runtime.InteropServices;
 namespace LadderRecords;
 
-// 프로그램 창의 모양 (사용자 결정, 2026-11-15: "밝은 정보형"을 바탕으로 라이트·다크 두 모드).
-// 색은 여기 한 곳에서 정하고, 창이 뜰 때 AppWindow 가 Apply 를 불러 부품마다 입힌다.
+// 프로그램 창의 색과 모양(라이트·다크 두 모드).
+// 색은 여기 한 곳에서 정하고, 창이 뜰 때 AppWindow 가 Theme.Apply 를 불러 컨트롤마다 적용한다.
 // 새 단추나 칸을 더해도 따로 색을 줄 필요가 없다. 달리 보여야 하는 것만 Tag 로 표시한다:
 //   단추 "primary"(채운 강조) · "default"(강조 테두리) · "danger"(빨간 테두리) · "swatch"(제 색을 그대로 둠)
-//   글 "dim"(옅게) · "accent" · "good" · "bad" · "warn",  판 "line" · "border" · "field"
+//   글 "dim"(옅게) · "accent" · "good" · "bad" · "warn",  패널 "line" · "border" · "field"
 // OBS 오버레이의 디자인은 여기와 상관없다(BadgeDesign, OverlayLayout).
 static class Theme
 {
  public static bool Dark;
- // 글꼴은 Windows 배율을 따라가지 않게 만든다(사용자 결정 2026-11-16, docs\기록\지원범위-시험.md).
+ // 글꼴은 Windows 배율을 따라가지 않게 만든다(배율별 시험 결과는 docs\기록\지원범위-시험.md).
  // 포인트로 만든 글꼴은 배율만큼 커지는데(125% 에서 1.25배) 창의 치수는 픽셀로 정해 둔 곳이 많아, 배율이 100% 가 아니면 글이 잘리고 겹쳤다.
  // 그래서 "포인트 크기를 100%(96 DPI) 때의 픽셀로 바꾼 값"으로 픽셀 단위 글꼴을 만든다. 어느 배율에서나 100% 때와 같은 배치가 된다.
  // 대가: 배율을 올려 쓰는 화면에서는 이 프로그램의 글자가 다른 프로그램보다 작게 보인다. 제목 줄과 스크롤 막대처럼 Windows 가 그리는 부분은 배율을 따라간다.
  public static Font Px(string family,float points,FontStyle style=FontStyle.Regular)=>new Font(family,points*96f/72f,style,GraphicsUnit.Pixel);
- // 글꼴을 따로 정하지 않은 부품이 쓰는 기본 글꼴도 같은 식으로 정한다. 창을 하나도 만들기 전에 한 번 부른다
+ // 글꼴을 따로 정하지 않은 컨트롤이 쓰는 앱의 기본 글꼴도 같은 식으로 설정한다. 첫 창을 만들기 전에 한 번 부른다(Program.Main)
  public static void FixDefaultFont(){var basic=SystemFonts.MessageBoxFont??Control.DefaultFont;Application.SetDefaultFont(Px(basic.FontFamily.Name,basic.SizeInPoints,basic.Style));}
  static Color C(int light,int dark)=>Color.FromArgb(unchecked((int)0xFF000000)|(Dark?dark:light));
  public static Color Window=>C(0xFFFFFF,0x14161A);
@@ -56,13 +56,13 @@ static class Theme
  [StructLayout(LayoutKind.Sequential)]struct Bounds{public int Left,Top,Right,Bottom;}
  [StructLayout(LayoutKind.Sequential)]struct ComboInfo{public int Size;public Bounds Item,Button;public int State;public IntPtr Combo,Edit,List;}
  [DllImport("user32.dll")]static extern bool GetComboBoxInfo(IntPtr combo,ref ComboInfo info);
- // 스크롤 막대는 Windows 가 그린다. 어두운 것으로 바꿔 달라고 창마다 알린다
+ // 스크롤 막대는 Windows 가 그린다. 창마다 SetWindowTheme 으로 현재 모드(라이트·다크)의 테마를 적용한다
  static void Scrollbars(IntPtr window)=>SetWindowTheme(window,Dark?"DarkMode_Explorer":null,null);
  public static void ApplyAll(){foreach(var form in Application.OpenForms.OfType<AppWindow>().ToArray())Apply(form);}
  public static void Apply(Form form)
  {
-  // 단추의 모양·최소 크기·굵은 글꼴을 바꿀 때마다 창 전체의 배치를 다시 잡으면 주 화면 하나에 2.5초가 든다(잰 값. docs\기록\최적화.md).
-  // 다 바꿀 때까지 배치를 멈췄다가 끝에 한 번만 잡는다.
+  // 단추의 모양·최소 크기·굵은 글꼴을 바꿀 때마다 창 전체의 레이아웃을 다시 계산하면 주 화면 하나에 2.5초가 든다(잰 값. docs\기록\최적화.md).
+  // 다 바꿀 때까지 레이아웃 계산을 멈췄다가 끝에 한 번만 계산한다.
   var held=Hold(form);
   try
   {
@@ -75,11 +75,11 @@ static class Theme
   finally{Release(held);}
   form.Invalidate(true);
  }
- // 이 부품과 그 안의 모든 부품의 배치를 멈춘다. Release 는 안쪽부터 풀면서 그동안 밀린 배치를 한 번씩만 잡는다(안쪽의 크기가 정해진 뒤에 바깥이 잡힌다).
+ // 이 컨트롤과 그 안의 모든 컨트롤의 레이아웃 계산을 멈춘다(SuspendLayout). Release 는 안쪽부터 풀면서 그동안 밀린 레이아웃을 한 번씩만 계산한다(안쪽의 크기가 정해진 뒤에 바깥을 계산한다).
  internal static List<Control> Hold(Control top){var all=new List<Control>();void Visit(Control c){all.Add(c);c.SuspendLayout();foreach(Control child in c.Controls)Visit(child);}Visit(top);return all;}
  internal static void Release(List<Control> held){for(int i=held.Count-1;i>=0;i--)if(!held[i].IsDisposed)held[i].ResumeLayout(true);}
 
- // Windows 가 그리는 부품 가운데 색을 정할 수 없는 것은 그려진 뒤에 덧그린다(체크 상자의 네모, 숫자 칸의 위아래 단추). 부품마다 한 번만 건다
+ // Windows 가 그리는 컨트롤 가운데 색을 정할 수 없는 것은 그려진 뒤에 덧그린다(체크 상자의 네모, 숫자 칸의 위아래 단추). Paint 핸들러는 컨트롤마다 한 번만 등록한다
  static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Control,object> hooked=new();
  static void Hook(Control control,PaintEventHandler paint){if(hooked.TryGetValue(control,out _))return;hooked.Add(control,paint);control.Paint+=paint;}
  static void PaintCheck(object? sender,PaintEventArgs e)

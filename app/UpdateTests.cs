@@ -24,8 +24,8 @@ static class UpdateTests
   File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"update-validation.txt"),string.Join("\n",notes)+$"\nPASS: {notes.Count} checks");
  }
 
- /// <summary>진짜 공식 저장소의 릴리즈 목록을 읽어 본다(--update-official-check 로만 돈다. 인터넷을 쓴다: GitHub 에 세 번 묻는다). 내려받지는 않는다.
- /// 프로그램이 실제 응답의 모양을 읽을 수 있는지 보는 것이다. 결과는 update-official-check.txt.</summary>
+ /// <summary>진짜 공식 저장소의 릴리즈 목록을 읽어 본다(--update-official-check 로만 돈다. 인터넷을 쓴다: GitHub 에 릴리즈 목록을 세 번 조회한다). 내려받지는 않는다.
+ /// 프로그램이 실제 응답의 형식을 읽을 수 있는지 보는 것이다. 결과는 update-official-check.txt.</summary>
  public static void Official()
  {
   static string Describe(CheckResult result)=>result switch
@@ -42,7 +42,7 @@ static class UpdateTests
   File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"update-official-check.txt"),string.Join("\n",lines)+"\n");
  }
 
- /// <summary>자동 업데이트의 창을 그림으로 남긴다(--update-windows-check. 라이트·다크). 인터넷을 쓰지 않고 아무것도 내려받지 않는다.</summary>
+ /// <summary>자동 업데이트의 창을 캡처해 실행 파일 옆에 PNG 로 저장한다(--update-windows-check. 라이트·다크). 인터넷을 쓰지 않고 아무것도 내려받지 않는다.</summary>
  public static void Previews()
  {
   var release=new ReleaseInfo(new Version(1,2,0),"# v1.2.0 패치노트\n\n- 자동 업데이트를 추가했습니다.\n- 지원 기어를 추가했습니다: 예시 기어\n- 추가 악곡과 SC 패턴을 반영했습니다.\n\n## 고친 것\n- **기록 목록 창**을 닫을 때 프로그램이 늦게 끝나던 문제",
@@ -271,7 +271,7 @@ static class UpdateTests
   var occupied=UpdateSwap.Exchange(app,UpdateSwap.Current(app),park,staged,bring,false,expected,log.Add);
   Check(occupied is {Done:false,Restored:true}&&Same(Picture(app),untouched),"something else in the way: refused and rolled back, not deleted");
   Check(UpdateSwap.Conflicts(app,UpdateSwap.Current(app),bring).SequenceEqual(new[]{"new-only.dll"}),"a folder in the way is found before swapping");
-  // 목록에 없는 사용자의 파일이 새 버전의 파일과 이름이 같다(리뷰 1번): 프로그램 파일로 보지 않고, 바꾸기 전에 알아채고, 그래도 바꾸려 들면 덮어쓰지도 백업으로 옮기지도 않는다
+  // 프로그램 파일 목록에 없는 사용자의 파일이 새 버전의 파일과 이름이 같은 경우: 프로그램 파일로 보지 않고, 교체 전의 확인(Conflicts, CheckPlace)이 찾아내며, 그래도 교체(Exchange)를 실행하면 덮어쓰지도 백업으로 옮기지도 않는다
   (app,staged,park)=Fresh("users-file");File.WriteAllText(Path.Combine(app,"new-only.dll"),"USER DATA");untouched=Picture(app);
   current=UpdateSwap.Current(app);
   Check(current.Count==oldFiles.Length+1&&!current.Contains("new-only.dll"),"user's file named like a new program file is not taken for a program file");
@@ -306,7 +306,7 @@ static class UpdateTests
   var(reference2,_,_)=Fresh("reference2");
   Check(unmix.Done&&Same(Program2(app),Program2(reference2)),"restoring from the backup untangles the mixed folder");
 
-  // 새 파일은 모두 들어왔는데 새 목록을 넣기 전에 멈췄다(재리뷰 1번). 새 버전에만 있는 파일(new-only.dll)은 백업에 같은 이름이 없어서,
+  // 새 파일은 모두 들어왔는데 새 프로그램 파일 목록을 넣기 전에 교체가 멈춘 경우. 새 버전에만 있는 파일(new-only.dll)은 백업에 같은 이름이 없어서,
   // 백업의 이름만으로 고르면 되돌린 뒤에도 남고, 다음 업데이트가 그것을 사용자의 파일로 보고 멈춘다.
   // 풀어 놓은 새 버전의 목록과 크기·해시가 같은 것만 그 교체가 들여놓은 것으로 본다
   (string App,UpdatePaths Paths,string Park) Stopped(string name)
@@ -423,15 +423,15 @@ static class UpdateTests
   Check(note!=null&&note.Contains("되돌림")&&!Directory.Exists(Path.Combine(paths.Root,"replaced-1")),"restore is noted and the parked newer program removed");
   paths=Fresh();Directory.CreateDirectory(paths.Root);File.WriteAllText(paths.StateFile,"{broken");
   Check(UpdateStartup.Resolve(paths) is (null,null)&&File.Exists(paths.StateFile),"unreadable state file is left alone");
-  // 지난 시도의 임시 파일을 다른 쪽이 잡고 있어 뒷정리가 끝나지 않는 사이에 새 업데이트가 시작된다(리뷰 2번).
-  // 뒷정리는 같은 자리(download, staging)를 다시 지우므로, 새 업데이트를 준비하기 전에 멈춰야 한다
+  // 지난 시도의 임시 파일을 다른 프로그램이 잡고 있어 임시 폴더 정리(CleanLater)가 끝나지 않는 사이에 새 업데이트가 시작되는 경우.
+  // 그 정리는 같은 자리(download, staging)를 다시 지우므로, 새 업데이트를 준비하기 전에 멈춰야 한다
   paths=Fresh();Directory.CreateDirectory(paths.Staging);string held=Path.Combine(paths.Staging,"held.bin"),fresh=Path.Combine(paths.Download,"new-download.part");File.WriteAllText(held,"left by an earlier attempt");
   void Put(){for(int i=0;;i++)try{Directory.CreateDirectory(paths.Download);File.WriteAllText(fresh,"new attempt");return;}catch(Exception e)when((e is IOException or UnauthorizedAccessException)&&i<50){Thread.Sleep(10);}}
   int cleanPause=UpdateStartup.CleanPause;UpdateStartup.CleanPause=100;
   using(new FileStream(held,FileMode.Open,FileAccess.Read,FileShare.Read))
   {
    UpdateStartup.Resolve(paths);
-   // 멈추지 않으면: 뒷정리가 다시 돌면서 새로 생긴 파일을 지운다(검사가 그 상황을 실제로 만들었는지 본다)
+   // 멈추지 않으면: 임시 폴더 정리가 다시 돌면서 새로 생긴 파일을 지운다(검사가 그 상황을 실제로 만들었는지 본다)
    Put();for(int i=0;i<100&&File.Exists(fresh);i++)Thread.Sleep(20);
    Check(!File.Exists(fresh)&&File.Exists(held),"cleanup keeps retrying while an old file is held, and would remove a new attempt's file");
    UpdateStartup.StopCleaning();
