@@ -33,6 +33,15 @@ def local_path(key: str, env: str):
     return Path(value) if value else None
 
 
+def local_names(key: str) -> dict[str, str]:
+    """local-paths.json 에 적어 둔 이름의 대응표(옛 이름 → 지금 이름). 적어 두지 않았으면 빈 표."""
+    if LOCAL.is_file():
+        value = json.loads(LOCAL.read_text(encoding="utf-8-sig")).get(key)
+        if isinstance(value, dict):
+            return {str(old): str(new) for old, new in value.items()}
+    return {}
+
+
 # 검사 설정과 0.5초 PNG 는 testdata\ladder-records 에 둔다. 옛 작업 폴더의 ladder-records 를 구조 그대로 복사해 온 것이다.
 # 복사해 온 JSON 안에는 옛 절대 경로가 그대로 적혀 있다. 원본을 고치지 않고, 읽을 때 here() 로 사본의 경로로 바꾼다.
 # (옛 경로를 여기에 적어 두지 않는다. 경로 안의 ladder-records 폴더를 찾아 그 아래만 쓴다)
@@ -43,6 +52,9 @@ LADDER = Path(__file__).resolve().parent.parent / "testdata" / LADDER_NAME
 # (옛 경로를 여기에 적어 두지 않는다. 경로 안의 "기어표본" 폴더를 찾아 그 아래만 쓴다)
 VIDEOS_NAME = "기어표본"
 VIDEOS = local_path("source_videos", "DJMAX_SOURCE_VIDEOS")      # 알려 주지 않았으면 None
+# 원본 영상의 파일 이름을 바꿨으면 local-paths.json 의 source_video_names 에 {"옛 이름": "지금 이름"} 으로 적는다.
+# 검사 설정 JSON 에 적힌 이름은 고치지 않고, 읽을 때 video() 가 지금 이름으로 바꾼다. 적어 두지 않은 이름은 그대로 쓴다.
+VIDEO_NAMES = local_names("source_video_names")
 VALIDATION = LADDER / "score-screen-placement-probe" / "validation-20261111"
 OUT = ROOT / "data" / "frames05b"            # frames05 는 1차 학습(v2)용 48x192 묶음
 HEIGHT, WIDTH = 64, 256
@@ -107,6 +119,7 @@ def video(path) -> str:
     """검사 설정에 적힌 원본 영상의 옛 경로를 지금 영상이 있는 폴더(VIDEOS)의 경로로 바꾼다.
 
     경로에서 마지막으로 나오는 "기어표본" 폴더의 아래만 쓴다. 그 폴더가 없는 경로는 그대로 둔다.
+    파일 이름이 이름의 대응표(VIDEO_NAMES)에 있으면 지금 이름으로 바꾼다.
     영상이 있는 폴더를 알려 주지 않았으면 무엇이 필요한지 알리고 끝낸다."""
     text = str(path).replace("/", "\\")
     parts = text.split("\\")
@@ -116,7 +129,10 @@ def video(path) -> str:
                 raise SystemExit("원본 녹화 영상(기어 표본)이 있는 폴더를 알려 주지 않았다.\n"
                                  "환경 변수 DJMAX_SOURCE_VIDEOS 나 저장소 맨 위 local-paths.json 의 source_videos 로 알려 준다.\n"
                                  "원본 녹화는 저장소에 들어 있지 않다. 없으면 영상을 읽는 도구는 돌릴 수 없다.")
-            return str(VIDEOS.joinpath(*[p for p in parts[i + 1:] if p]))
+            rest = [p for p in parts[i + 1:] if p]
+            if rest:
+                rest[-1] = VIDEO_NAMES.get(rest[-1], rest[-1])
+            return str(VIDEOS.joinpath(*rest))
     return str(path)
 
 
