@@ -6,5 +6,5 @@ reader.onnx  점수 판독 모델 v17. 내보낸 경로: data\runs\v17\reader.on
              SHA256 69c77899356365be750b0b2e5118697d8798f53c296dc370e8b6c6186bac0fc0
 
 입력 전처리(자르는 여백, 크기 맞추기)는 dotnet\ScoreModule 의 코드에 있다. 모델을 교체할 때 입력 크기와 전처리 방식이 일치하는지 확인하고, 이 파일의 해시도 고친다.
-학습에 쓴 것: LEFT·CENTER 녹화 180개. RIGHT 녹화 90개는 학습에 쓰지 않았다. 근거와 수치는 docs\기록\ 에 있다.
+학습에 쓴 것: LEFT·CENTER 녹화 180개. RIGHT 녹화 90개는 학습에 쓰지 않았다.
 ONNX Runtime 으로 CPU 에서 돈다. 그래픽 카드나 Python 은 필요 없다.

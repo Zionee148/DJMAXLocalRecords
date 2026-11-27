@@ -335,7 +335,7 @@ public static class ModuleRun
         Check("두 장만 넣고 마치면 Failed·NotEnoughFrames", module.Registration is { RequestId: 4, State: RegistrationStatus.Failed, Reason: "NotEnoughFrames" }, Now());
         Check("끝난 요청에 넣는 화면은 무시한다", Ignored(() => module.PushRegistrationFrame(4, feeder.Frame(q, 1, n + 1), feeder.Buffer)));
 
-        // 사라지면 직전 값(2026-11-14 에 정한 규칙): 같은 값이 0.3초(네 장) 이어진 뒤 0.5초를 채우기 전에 점수가 사라진다
+        // 사라지면 직전 값: 같은 값이 0.3초(네 장) 이어진 뒤 0.5초를 채우기 전에 점수가 사라진다
         module.BeginRegistration(7, 1, At(), At() + 8 * Ticks);
         for (int i = 0; i < 4; i++) { q = Next(6); module.PushRegistrationFrame(7, feeder.Frame(q, 1, n), feeder.Buffer); }
         Check("같은 값 네 장(0.3초)까지는 아직 Reading", module.Registration is { RequestId: 7, State: RegistrationStatus.Reading }, Now());

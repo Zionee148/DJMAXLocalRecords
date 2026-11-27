@@ -3,11 +3,45 @@ using System.Security.Cryptography;
 using System.Text.Json;
 namespace LadderRecords;
 
-// 자동 업데이트: 배포 파일(ZIP)을 내려받고, 크기와 SHA-256 을 릴리즈에 적힌 값과 견주고, 풀어서 내용이 프로그램 파일 목록과 맞는지 확인하는 부분 (기획서 3절·6절).
+// 자동 업데이트: 배포 파일(ZIP)을 내려받고, 크기와 SHA-256 을 릴리즈에 적힌 값과 견주고, 풀어서 내용이 프로그램 파일 목록과 맞는지 확인하는 부분.
 // 여기까지는 지금의 프로그램과 기록을 건드리지 않는다. 쓰는 곳은 프로그램 폴더의 update\ 아래뿐이다.
 
-/// <summary>업데이트 실패를 알리는 예외. Message 는 사용자에게 그대로 보여 줄 실패 사유다.</summary>
-class UpdateException(string message):Exception(message);
+/// <summary>
+/// 업데이트가 멈춘 까닭의 종류. 실패 안내창이 이것으로 첫 줄과 다음 행동을 고른다.
+/// 종류는 안내의 모양만 정한다: 어느 경우에 멈추는지는 종류에 따라 달라지지 않는다
+/// </summary>
+enum UpdateTrouble
+{
+ /// <summary>가르지 못한 것(.NET 의 글이 그대로 올 수 있다)</summary>
+ Unknown,
+ /// <summary>내려받지 못했다: 연결이 안 되거나 끊기거나 응답이 멈췄다</summary>
+ Network,
+ /// <summary>받은 파일을 디스크에 쓰지 못했다(내려받아 쓰거나 풀어 쓰다가. 공간, 다른 프로그램의 잠금, 권한)</summary>
+ Disk,
+ /// <summary>받은 파일이 릴리즈와 맞지 않거나, 풀어 보니 내용이 이 프로그램의 배포 파일이 아니다</summary>
+ BadFile,
+ /// <summary>디스크의 빈 공간이 모자란다(Needed: 필요한 바이트. 모르면 0)</summary>
+ NoSpace,
+ /// <summary>프로그램 폴더에 쓸 수 없다(Place: 그 폴더)</summary>
+ Locked,
+ /// <summary>새 버전의 파일이 올 자리에 이 프로그램의 것이 아닌 것이 있다(Items: 그 경로들. 많으면 앞의 다섯과 "(그 밖에 N개)")</summary>
+ Clash,
+ /// <summary>지금 설치의 프로그램 파일 목록을 읽지 못해 무엇을 바꿔도 되는지 모른다</summary>
+ NoList,
+ /// <summary>기록과 설정을 백업하지 못했다</summary>
+ Backup,
+ /// <summary>교체나 복구를 맡을 실행 파일을 켜지 못했다(켜지지 않음, 곧바로 끝남, 응답 없음)</summary>
+ HandOver,
+}
+
+/// <summary>업데이트 실패를 알리는 예외. Message 는 사용자에게 그대로 보여 줄 실패 사유다(안내창의 '오류 내용'). Kind 와 값은 안내창이 첫 줄·다음 행동·경로를 고르는 데 쓴다.</summary>
+class UpdateException(string message,UpdateTrouble kind=UpdateTrouble.Unknown,string? place=null,IReadOnlyList<string>? items=null,long needed=0):Exception(message)
+{
+ public UpdateTrouble Kind=>kind;
+ public string? Place=>place;
+ public IReadOnlyList<string> Items=>items??Array.Empty<string>();
+ public long Needed=>needed;
+}
 
 record ManifestFile(string Path,long Size,string Sha256);
 
@@ -36,7 +70,8 @@ static class UpdateFiles
 {
  // 프로그램이 실행 중에 실행 파일 옆에 만들거나 사용자가 두는 것. 배포물에 들어 있으면 안 되고, 업데이트가 프로그램 파일로 다뤄서도 안 된다
  static readonly string[] ProtectedNames={"records.json","records.json.bak","records.json.tmp","hotkeys.json","preferences.json","records-view.json","appearance.json",UpdateTestConfig.FileName};
- static readonly string[] ProtectedFolders={"diagnostics","update"};
+ // 'UserData'는 v1.2.0 부터의 개인 자료 폴더다. 위의 이름들은 v1.1.x 까지 실행 파일 옆에 두던 자리로, 옮긴 뒤에도 옛 원본이 남으므로 계속 보호한다
+ static readonly string[] ProtectedFolders={"diagnostics","update",UserFiles.FolderName};
  /// <summary>기록·설정 사본에 담는 파일(있는 것만).</summary>
  public static readonly string[] DataFiles={"records.json","records.json.bak","hotkeys.json","preferences.json","records-view.json","appearance.json"};
 
@@ -78,17 +113,20 @@ static class UpdatePackage
  public static async Task Download(ReleaseInfo release,string target,Action<long,long>? progress,CancellationToken cancel)
  {
   string part=target+".part";
-  Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+  bool writing=false;   // 지금 디스크에 쓰는 중인가(아니면 받는 중). 입출력 오류가 어느 쪽인지 가른다(디스크에 쓰지 못한 것을 인터넷 문제로 안내하지 않는다)
   try
   {
+   writing=true;Directory.CreateDirectory(Path.GetDirectoryName(target)!);writing=false;
    using var stall=CancellationTokenSource.CreateLinkedTokenSource(cancel);stall.CancelAfter(Stall);
    using var response=await UpdateChecker.Http.GetAsync(release.Url,HttpCompletionOption.ResponseHeadersRead,stall.Token);
-   if(!response.IsSuccessStatusCode)throw new UpdateException($"배포 파일을 받지 못했습니다(응답 {(int)response.StatusCode}).");
+   if(!response.IsSuccessStatusCode)throw new UpdateException($"배포 파일을 받지 못했습니다(응답 {(int)response.StatusCode}).",UpdateTrouble.Network);
    if(response.Content.Headers.ContentLength is long announced&&announced!=release.Size)
-    throw new UpdateException("받으려는 파일의 크기가 릴리즈에 적힌 것과 다릅니다.");
+    throw new UpdateException("받으려는 파일의 크기가 릴리즈에 적힌 것과 다릅니다.",UpdateTrouble.BadFile);
    await using var source=await response.Content.ReadAsStreamAsync(stall.Token);
+   writing=true;
    await using(var file=new FileStream(part,FileMode.Create,FileAccess.Write,FileShare.None,1<<16,true))
    {
+    writing=false;
     var buffer=new byte[1<<16];long total=0;
     while(true)
     {
@@ -96,17 +134,21 @@ static class UpdatePackage
      int read=await source.ReadAsync(buffer,stall.Token);
      if(read==0)break;
      total+=read;
-     if(total>release.Size)throw new UpdateException("받은 파일이 릴리즈에 적힌 크기보다 큽니다.");
-     await file.WriteAsync(buffer.AsMemory(0,read),stall.Token);
+     if(total>release.Size)throw new UpdateException("받은 파일이 릴리즈에 적힌 크기보다 큽니다.",UpdateTrouble.BadFile);
+     writing=true;await file.WriteAsync(buffer.AsMemory(0,read),stall.Token);writing=false;
      progress?.Invoke(total,release.Size);
     }
-    if(total!=release.Size)throw new UpdateException("받는 도중 연결이 끊겼습니다(파일을 끝까지 받지 못했습니다).");
+    if(total!=release.Size)throw new UpdateException("받는 도중 연결이 끊겼습니다(파일을 끝까지 받지 못했습니다).",UpdateTrouble.Network);
+    writing=true;   // 파일을 닫으며 남은 것을 쓴다
    }
-   File.Move(part,target,true);
+   File.Move(part,target,true);writing=false;
   }
-  catch(OperationCanceledException)when(!cancel.IsCancellationRequested){Remove(part);throw new UpdateException("응답이 멈춰 내려받지 못했습니다. 인터넷 연결을 확인해 주세요.");}
-  catch(HttpRequestException){Remove(part);throw new UpdateException("연결하지 못해 내려받지 못했습니다. 인터넷 연결을 확인해 주세요.");}
-  catch(IOException e){Remove(part);throw new UpdateException("받는 도중 연결이 끊겼거나 파일을 쓰지 못했습니다. ("+e.Message+")");}
+  // 이 글들은 안내창의 '오류 내용'에 접힌다. 인터넷 연결을 확인하라는 다음 행동은 안내창의 본문에 있으므로 까닭만 적는다
+  catch(OperationCanceledException)when(!cancel.IsCancellationRequested){Remove(part);throw new UpdateException("서버가 30초 동안 응답하지 않았습니다.",UpdateTrouble.Network);}
+  catch(HttpRequestException){Remove(part);throw new UpdateException("GitHub에 연결하지 못했습니다.",UpdateTrouble.Network);}
+  catch(IOException e)when(writing){Remove(part);throw new UpdateException("받은 파일을 디스크에 쓰지 못했습니다. ("+e.Message+")",UpdateTrouble.Disk);}
+  catch(UnauthorizedAccessException e){Remove(part);throw new UpdateException("받은 파일을 디스크에 쓰지 못했습니다. ("+e.Message+")",UpdateTrouble.Disk);}
+  catch(IOException e){Remove(part);throw new UpdateException("받는 도중 연결이 끊겼습니다. ("+e.Message+")",UpdateTrouble.Network);}
   catch{Remove(part);throw;}
  }
  static void Remove(string path){try{File.Delete(path);}catch(IOException){}catch(UnauthorizedAccessException){}}
@@ -114,9 +156,9 @@ static class UpdatePackage
  /// <summary>받은 파일의 크기와 SHA-256 이 릴리즈에 적힌 것과 같은지 본다.</summary>
  public static void VerifyDownload(string file,ReleaseInfo release)
  {
-  if(new FileInfo(file).Length!=release.Size)throw new UpdateException("받은 파일의 크기가 릴리즈에 적힌 것과 다릅니다.");
+  if(new FileInfo(file).Length!=release.Size)throw new UpdateException("받은 파일의 크기가 릴리즈에 적힌 것과 다릅니다.",UpdateTrouble.BadFile);
   if(!string.Equals(UpdateFiles.Sha256(file),release.Sha256,StringComparison.OrdinalIgnoreCase))
-   throw new UpdateException("받은 파일이 릴리즈에 적힌 것과 다릅니다(SHA-256 이 맞지 않습니다). 파일이 손상되었거나 바뀐 것일 수 있습니다.");
+   throw new UpdateException("받은 파일이 릴리즈에 적힌 것과 다릅니다(SHA-256이 맞지 않습니다). 파일이 손상되었거나 바뀐 것일 수 있습니다.",UpdateTrouble.BadFile);
  }
 
  /// <summary>배포 파일을 stagingRoot 아래에 풀고 내용을 확인한다. 풀린 프로그램 폴더는 stagingRoot\DJMAXLocalRecords 다.
@@ -130,59 +172,59 @@ static class UpdatePackage
   try
   {
    using var archive=ZipFile.OpenRead(zip);
-   if(archive.Entries.Count>MaxEntries)throw new UpdateException("배포 파일에 든 파일이 너무 많습니다.");
+   if(archive.Entries.Count>MaxEntries)throw new UpdateException("배포 파일에 든 파일이 너무 많습니다.",UpdateTrouble.BadFile);
    long total=0;
    foreach(var entry in archive.Entries)
    {
     cancel.ThrowIfCancellationRequested();
     string name=entry.FullName.Replace('\\','/');
     if(name.EndsWith('/'))continue;   // 폴더 항목
-    if(!name.StartsWith(Top,StringComparison.Ordinal))throw new UpdateException($"배포 파일의 구조가 예상과 다릅니다(맨 위 폴더가 {UpdateManifest.ProductName} 이 아닙니다).");
+    if(!name.StartsWith(Top,StringComparison.Ordinal))throw new UpdateException($"배포 파일의 구조가 예상과 다릅니다(맨 위 폴더가 {UpdateManifest.ProductName}가 아닙니다).",UpdateTrouble.BadFile);
     string relative=name[Top.Length..];
-    if(!UpdateFiles.IsSafe(relative))throw new UpdateException("배포 파일에 쓸 수 없는 경로가 들어 있습니다: "+name);
-    if(UpdateFiles.IsProtected(relative))throw new UpdateException("배포 파일에 개인 자료의 자리를 차지하는 파일이 들어 있습니다: "+relative);
-    if(!extracted.Add(relative))throw new UpdateException("배포 파일에 같은 경로가 두 번 들어 있습니다: "+relative);
+    if(!UpdateFiles.IsSafe(relative))throw new UpdateException("배포 파일에 쓸 수 없는 경로가 들어 있습니다: "+name,UpdateTrouble.BadFile);
+    if(UpdateFiles.IsProtected(relative))throw new UpdateException("배포 파일에 개인 자료와 이름이 같은 파일이 들어 있습니다: "+relative,UpdateTrouble.BadFile);
+    if(!extracted.Add(relative))throw new UpdateException("배포 파일에 같은 경로가 두 번 들어 있습니다: "+relative,UpdateTrouble.BadFile);
     total+=entry.Length;
-    if(total>MaxUnpackedBytes)throw new UpdateException("배포 파일을 풀면 예상보다 훨씬 큽니다.");
+    if(total>MaxUnpackedBytes)throw new UpdateException("배포 파일을 풀면 예상보다 훨씬 큽니다.",UpdateTrouble.BadFile);
     string target=Path.GetFullPath(Path.Combine(appRoot,UpdateFiles.Local(relative)));
-    if(!target.StartsWith(inside,StringComparison.OrdinalIgnoreCase))throw new UpdateException("배포 파일에 폴더 밖을 가리키는 경로가 들어 있습니다: "+name);
+    if(!target.StartsWith(inside,StringComparison.OrdinalIgnoreCase))throw new UpdateException("배포 파일에 폴더 밖을 가리키는 경로가 들어 있습니다: "+name,UpdateTrouble.BadFile);
     Directory.CreateDirectory(Path.GetDirectoryName(target)!);
     using var from=entry.Open();using var to=new FileStream(target,FileMode.CreateNew,FileAccess.Write,FileShare.None,1<<16);
     // 적힌 크기보다 더 풀리면 멈춘다
     var buffer=new byte[1<<16];long written=0;int read;
     while((read=from.Read(buffer,0,buffer.Length))>0)
     {
-     written+=read;if(written>entry.Length)throw new UpdateException("배포 파일의 압축 정보가 맞지 않습니다: "+relative);
+     written+=read;if(written>entry.Length)throw new UpdateException("배포 파일의 압축 정보가 맞지 않습니다: "+relative,UpdateTrouble.BadFile);
      to.Write(buffer,0,read);
     }
    }
   }
-  catch(InvalidDataException){throw new UpdateException("배포 파일이 ZIP 으로 읽히지 않습니다(손상되었을 수 있습니다).");}
-  catch(IOException e){throw new UpdateException("배포 파일을 풀지 못했습니다. ("+e.Message+")");}
-  catch(UnauthorizedAccessException e){throw new UpdateException("배포 파일을 풀지 못했습니다. ("+e.Message+")");}
+  catch(InvalidDataException){throw new UpdateException("배포 파일이 ZIP으로 읽히지 않습니다(손상되었을 수 있습니다).",UpdateTrouble.BadFile);}
+  catch(IOException e){throw new UpdateException("배포 파일을 풀지 못했습니다. ("+e.Message+")",UpdateTrouble.Disk);}
+  catch(UnauthorizedAccessException e){throw new UpdateException("배포 파일을 풀지 못했습니다. ("+e.Message+")",UpdateTrouble.Disk);}
 
-  var manifest=UpdateManifest.Read(appRoot)??throw new UpdateException($"배포 파일에 프로그램 파일 목록({UpdateManifest.FileName})이 없거나 읽히지 않습니다.");
-  if(manifest.Product!=UpdateManifest.ProductName)throw new UpdateException("이 프로그램의 배포 파일이 아닙니다.");
-  if(manifest.Target!=UpdateManifest.TargetName)throw new UpdateException($"Windows 64비트용 배포 파일이 아닙니다(대상: {manifest.Target}).");
+  var manifest=UpdateManifest.Read(appRoot)??throw new UpdateException($"배포 파일에 프로그램 파일 목록({UpdateManifest.FileName})이 없거나 읽히지 않습니다.",UpdateTrouble.BadFile);
+  if(manifest.Product!=UpdateManifest.ProductName)throw new UpdateException("이 프로그램의 배포 파일이 아닙니다.",UpdateTrouble.BadFile);
+  if(manifest.Target!=UpdateManifest.TargetName)throw new UpdateException($"Windows 64비트용 배포 파일이 아닙니다(대상: {manifest.Target}).",UpdateTrouble.BadFile);
   if(!AppVersion.TryParsePlain(manifest.Version,out var version)||version!=expected)
-   throw new UpdateException($"배포 파일에 든 버전({manifest.Version})이 고른 버전({AppVersion.Plain(expected)})과 다릅니다.");
+   throw new UpdateException($"배포 파일에 든 버전(v{manifest.Version})이 받으려던 버전({AppVersion.Text(expected)})과 다릅니다.",UpdateTrouble.BadFile);
   var listed=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
   foreach(var file in manifest.Files)
   {
    if(!UpdateFiles.IsSafe(file.Path)||UpdateFiles.IsProtected(file.Path)||file.Path.Equals(UpdateManifest.FileName,StringComparison.OrdinalIgnoreCase)||!listed.Add(file.Path))
-    throw new UpdateException("프로그램 파일 목록에 받아들일 수 없는 경로가 있습니다: "+file.Path);
+    throw new UpdateException("프로그램 파일 목록에 받아들일 수 없는 경로가 있습니다: "+file.Path,UpdateTrouble.BadFile);
   }
-  if(!listed.Contains(UpdateManifest.Executable))throw new UpdateException("배포 파일에 실행 파일이 없습니다.");
+  if(!listed.Contains(UpdateManifest.Executable))throw new UpdateException("배포 파일에 실행 파일이 없습니다.",UpdateTrouble.BadFile);
   extracted.Remove(UpdateManifest.FileName);
   var extra=extracted.Where(p=>!listed.Contains(p)).ToList();var missing=listed.Where(p=>!extracted.Contains(p)).ToList();
-  if(extra.Count>0)throw new UpdateException("배포 파일에 목록에 없는 파일이 들어 있습니다: "+string.Join(", ",extra.Take(3)));
-  if(missing.Count>0)throw new UpdateException("목록에 있는 파일이 배포 파일에 없습니다: "+string.Join(", ",missing.Take(3)));
+  if(extra.Count>0)throw new UpdateException("배포 파일에 목록에 없는 파일이 들어 있습니다: "+string.Join(", ",extra.Take(3)),UpdateTrouble.BadFile);
+  if(missing.Count>0)throw new UpdateException("목록에 있는 파일이 배포 파일에 없습니다: "+string.Join(", ",missing.Take(3)),UpdateTrouble.BadFile);
   foreach(var file in manifest.Files)
   {
    cancel.ThrowIfCancellationRequested();
    string path=Path.Combine(appRoot,UpdateFiles.Local(file.Path));
    if(new FileInfo(path).Length!=file.Size||!string.Equals(UpdateFiles.Sha256(path),file.Sha256,StringComparison.OrdinalIgnoreCase))
-    throw new UpdateException("배포 파일에서 푼 파일이 목록과 다릅니다: "+file.Path);
+    throw new UpdateException("배포 파일에서 푼 파일이 목록과 다릅니다: "+file.Path,UpdateTrouble.BadFile);
   }
   return manifest;
  }

@@ -17,12 +17,12 @@ static class ScoreRateChecks
   store.Put(c,99.28m,rawScore:992840);Check(store.Get(c)!.Value==992869,"Lower raw score overwrote best");
   Check(store.Get(c with{Judge="노말"})!.Value==992840,"Normal propagation must use this measured score");
   store.Undo();Check(store.Get(c with{Judge="노말"})==null&&store.Get(c)!.PlayCount==2,"Undo linked propagation");
-  store.SetManual(c,99.20m,7,rawScore:992034);Check(store.Get(c)!.Value==992034,"Manual raw tail lost");
-  store.SetManual(c,99.20m,8);Check(store.Get(c)!.Value==992000,"Manual RATE conversion");
+  var manual=c with{Button=5};store.SetManual(manual,99.20m,0,rawScore:992034);Check(store.Get(manual)!.Value==992034,"Manual raw tail lost");   // 수동으로 넣는 것은 한 판을 더하는 것이라 빈 판정에서 본다
+  manual=c with{Button=6};store.SetManual(manual,99.20m,0);Check(store.Get(manual)!.Value==992000,"Manual RATE conversion");
   Check(ScoreValue.Rate(999999)==99.99m&&ScoreValue.Rate(1000000)==100m&&ScoreValue.FromAccuracy(9.11m)==91100,"Conversion/truncation");
   var normal=c with{Judge="노말"};store.Put(normal,99.99m,rawScore:999999);
   int? count=store.Get(normal)!.PlayCount;store.Import(new Dictionary<Selection,decimal>{{normal,99.99m}});
-  Check(store.Get(normal)!.Value==999999&&store.Get(normal)!.PlayCount==count,"V ARCHIVE equal RATE discarded true raw score");
+  Check(store.Get(normal)!.Value==999999&&store.Get(normal)!.PlayCount==count+1,"V ARCHIVE equal RATE discarded true raw score");   // 가져온 기록은 따로 한 줄로 선다
   var session=new Session();session.Detect(c);session.Current=1;
   session.Begin(store.Active.Id,measuredAccuracy:99.28m,rawScore:992899,propagateNormal:false,chart:c,steamKey:"frozen");
   session.Current=2;session.Confirm(store);Check(store.Get(c)!.Value==992899,"Frozen record changed");

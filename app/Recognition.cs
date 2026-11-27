@@ -20,7 +20,7 @@ public string Detail{get;private set;}="";
  public void ResetContext(){hudAreas.Clear();comparisonAreas.Clear();judgeAt=0;cachedJudge=cachedMode=null;cachedGear=-1;}
  record Word(string Text,double X,double Y,double Width,double Height);
  async Task<List<Word>> Words(Bitmap frame,Rectangle area,int scale,bool binary=false){
-  if(engine==null)throw new Exception("Windows 영어 OCR 기능을 확인하세요.");area=Rectangle.Intersect(area,new(0,0,frame.Width,frame.Height));if(area.Width<1||area.Height<1)return new();using var image=new Bitmap(area.Width*scale+24,area.Height*scale+24);using(var g=Graphics.FromImage(image)){g.Clear(binary?Color.White:Color.Black);g.InterpolationMode=InterpolationMode.HighQualityBicubic;g.DrawImage(frame,new Rectangle(12,12,area.Width*scale,area.Height*scale),area,GraphicsUnit.Pixel);}
+  if(engine==null)throw new Exception("Windows 글자 인식(OCR)을 쓸 수 없습니다. Windows 설정의 언어에 영어(미국)를 추가해 주세요.");area=Rectangle.Intersect(area,new(0,0,frame.Width,frame.Height));if(area.Width<1||area.Height<1)return new();using var image=new Bitmap(area.Width*scale+24,area.Height*scale+24);using(var g=Graphics.FromImage(image)){g.Clear(binary?Color.White:Color.Black);g.InterpolationMode=InterpolationMode.HighQualityBicubic;g.DrawImage(frame,new Rectangle(12,12,area.Width*scale,area.Height*scale),area,GraphicsUnit.Pixel);}
   using var bitmap=OcrPixels.Create(image,binary);var result=await engine.RecognizeAsync(bitmap);return result.Lines.SelectMany(l=>l.Words.Select(w=>new Word(w.Text,area.X+(w.BoundingRect.X-12)/scale,area.Y+(w.BoundingRect.Y-12)/scale,w.BoundingRect.Width/scale,w.BoundingRect.Height/scale))).ToList();
  }
  static string Letters(string s)=>Regex.Replace(s.ToUpperInvariant(),"[^A-Z]","");
@@ -77,6 +77,7 @@ public string Detail{get;private set;}="";
  }
  async Task<string> Text(Bitmap frame,Rectangle r,int scale=3)=>string.Join(" ",(await Words(frame,r,scale)).Select(w=>w.Text));
  static int Colored(Bitmap frame,Rectangle r){int count=0;for(int y=r.Top;y<r.Bottom;y++)for(int x=r.Left;x<r.Right;x++){var c=frame.GetPixel(x,y);if(c.R>110&&c.GetSaturation()>.55)count++;}return count;}
+ static string Judged(string? judge)=>judge==null?"판정 확인 중":judge+"판정";
  public async Task<string?> ReadJudge(Bitmap frame,string mode,int gear){
   source=RateSource.Unknown;
   if(mode=="FREESTYLE"){source=RateSource.Hud;Detail="프리스타일 · 노말판정";return "노말";}
@@ -86,10 +87,9 @@ public string Detail{get;private set;}="";
    if(round.Contains("ROUND")){
     source=RateSource.Comparison;
     string badge=Letters(await Text(frame,new(panel+120,665,200,35),3));
-    Detail="본매치/버서스 비교 패널 · "+badge;
-    if(badge.Contains("MAX"))return "맥스";
-    if(badge.Contains("HARD"))return "하드";
-    return Colored(frame,new(panel+130,673,180,17))<80?"노말":null;
+    string? judge=badge.Contains("MAX")?"맥스":badge.Contains("HARD")?"하드":Colored(frame,new(panel+130,673,180,17))<80?"노말":null;
+    Detail="본매치/버서스 비교 패널 · "+Judged(judge);   // 읽은 영문 글자가 아니라 판단한 판정을 적는다(상태 줄에 보인다)
+    return judge;
    }
   }
   if(mode=="LADDERMATCH"){
@@ -97,10 +97,10 @@ public string Detail{get;private set;}="";
    string widget=Letters(await Text(frame,new(x,280,240,190),2));
    if(widget.Contains("LADDERMATCH")&&(widget.Contains("SEARCHING")||widget.Contains("RECORDSAVE"))){
     source=RateSource.Hud;
-    Detail="래더 연습모드 · "+widget;
     int badgeColor=Colored(frame,new(x+10,405,215,40));
-    if(widget.Contains("HARD")||widget.Contains("ARDJUDGEMENT")&&badgeColor>=60)return "하드";
-    return badgeColor<60?"노말":null;
+    string? judge=widget.Contains("HARD")||widget.Contains("ARDJUDGEMENT")&&badgeColor>=60?"하드":badgeColor<60?"노말":null;
+    Detail="래더 연습모드 · "+Judged(judge);
+    return judge;
    }
    Detail="래더 연습모드 표시 확인 중";
    return null;
@@ -118,12 +118,12 @@ public string Detail{get;private set;}="";
   string detail=Detail;
   bool comparison=source==RateSource.Comparison;
   if(judge==null&&!comparison){
-   if(hudAreas.ContainsKey(gear))return new(null,await ReadRate(b,gear),detail+" · 고정된 HUD RATE 분석",RateSource.Hud);
+   if(hudAreas.ContainsKey(gear))return new(null,await ReadRate(b,gear),detail+" · RATE 읽는 중",RateSource.Hud);
    return new(null,null,detail,source);
   }
   var rate=comparison?await ReadComparisonLocked(b,gear):await ReadRate(b,gear);
   if(mode=="OPENMATCH"&&source==RateSource.Hud&&rate==null&&!scoreAreaReady){judge=null;source=RateSource.Unknown;}
-  return new(judge,rate,detail+(rate==null?(comparison?" · 비교 패널 RATE 확인 중":" · RATE 확인 중"):""),source);
+  return new(judge,rate,detail+(rate==null?(comparison?" · 비교 패널 RATE 읽는 중":" · RATE 읽는 중"):""),source);
  }
 
  public void Dispose(){}

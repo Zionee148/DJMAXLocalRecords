@@ -52,7 +52,7 @@ public static class ZoneCheck
         Check(Area(1016, 771, 134, 45).CenterIn(right), "RIGHT: 정보판에 고정됐던 자리 (1016,771,134,45) (MUSEDASH!!!!)는 자리 안");
         Check(!new Box(1592.3, 966.3, 1681.5, 1038.6).CenterIn(right), "RIGHT: 그 판의 실제 점수 자리 (1592,966)~(1682,1039) 는 자리 밖");
         Check(!Area(1689, 872, 147, 64).CenterIn(right), "RIGHT: 같은 녹화의 셋째 판에서 고정된 실제 점수 자리 (1689,872,147,64) 는 자리 밖");
-        // KARTRIDER LEFT: 다시 읽을 때의 여백까지 포함한 범위(리뷰 20261117-래더패널-기어별탐색범위-검토). 가로로는 자리의 X 범위에 걸치지만 정보판보다 아래다
+        // KARTRIDER LEFT: 다시 읽을 때의 여백까지 포함한 범위. 가로로는 자리의 X 범위에 걸치지만 정보판보다 아래다
         var kart = new Box(525, 985, 766, 1053);
         Check(!kart.CenterIn(leftZone) && kart.X1 > leftZone.X0 && kart.Y0 >= leftZone.Y1, "LEFT: KARTRIDER 의 점수 범위 (525,985)~(766,1053) 는 가로로 걸쳐도 정보판 아래라 자리 밖");
 

@@ -10,7 +10,7 @@
 채점 (찾은 자리가 맞는지는 기준 영역과의 겹침이 아니라 "그 자리를 읽은 결과"로 본다. 기준 영역은 검사 설정에 적힌 점수 영역으로, 비교에만 쓴다)
   - 고정한 자리로 그 사례의 0.5초 간격 화면 전체를 다시 읽어, 등록 시점의 최종 점수가 기대 점수와 같은지 본다.
   - 탐지 모델은 그 기어를 빼고 학습한 것을 쓴다 (처음 보는 기어 디자인).
-  - 고정 시각은 "v6 판독에서 점수가 처음 읽힌 시각"으로부터의 시간으로 적는다. 실제 플레이 시작 라벨이 아직 없어서
+  - 고정 시각은 "v6 판독에서 점수가 처음 읽힌 시각"으로부터의 시간으로 적는다. 실제 플레이 시작 라벨이 없어서
     쓰는 참고값이며 20초 기준의 판정이 아니다.
 
 실행: .venv\\Scripts\\python.exe -m detector.locate_run <탐지 실행 이름> <판독 실행 이름> [사례 ...]
@@ -135,8 +135,8 @@ def lock_area(box, band_x0: int):
 class Track:
     """한 자리에서 계속 잡히는 검출 영역을 묶은 추적 후보. 기운 줄 가설은 같은 자리를 다른 자세로 읽는 "하위 추적 후보"(child)로 따로 둔다.
 
-    처음에는 안 읽히는 자리의 자세를 통째로 바꿨는데, 점수가 아직 뜨지 않은 곡 초반에 멀쩡한 자리를 기운 줄로
-    바꿔 버려 KARTRIDER·PIXEL ART·TECHNIKA 3 를 놓쳤다. 그래서 원래 읽기는 건드리지 않는다.
+    안 읽히는 자리의 자세를 통째로 바꾸면, 점수가 아직 뜨지 않은 곡 초반에 멀쩡한 자리를 기운 줄로
+    바꿔 버려 KARTRIDER·PIXEL ART·TECHNIKA 3 를 놓친다. 그래서 원래 읽기는 건드리지 않는다.
     """
 
     def __init__(self, box, at, parent=None, pose=None):
@@ -184,9 +184,9 @@ def locate(frames: np.ndarray, finder, reader, debug: list | None = None):
             if len(t.values) < 20 or len(t.parts) < 6 or at - t.pose_checked < 3.0 or sum(v > 0 for v in recent) >= 8:
                 continue
             t.pose_checked = at
-            # 조각들은 그때그때의 검출 영역으로 잘라 둔 것이라 크기가 한두 화소씩 다르다. 예전에는 크기가 다르면 건너뛰었는데,
-            # 그래서 이 검사가 한 번도 돌지 않았다: CYTUS 는 탐지 모델이 숫자 줄을 잘 잡고(168번) 30도 기울여 읽으면 전부 읽히는데도
-            # 세 위치 모두 고정하지 못했다(2026-11-13 에 찾음). 가장 최근 조각의 크기에 맞춘다.
+            # 조각들은 그때그때의 검출 영역으로 잘라 둔 것이라 크기가 한두 화소씩 다르다. 크기가 다르면 건너뛰게 하면
+            # 이 검사가 돌지 않는다: CYTUS 는 탐지 모델이 숫자 줄을 잘 잡고(168번) 30도 기울여 읽으면 전부 읽히는데도
+            # 세 위치 모두 고정하지 못했다. 그래서 가장 최근 조각의 크기에 맞춘다.
             height, width = t.parts[-1].shape[:2]
             if height < 8 or width < 8:
                 continue
@@ -198,8 +198,8 @@ def locate(frames: np.ndarray, finder, reader, debug: list | None = None):
             v, c, _ = decode(reader(to_tensor(batch).to(DEVICE)).cpu())
             n = len(same)
             clear = [sum(1 for k in range(j * n, j * n + n) if v[k] > 0 and c[k] >= 0.8) / n for j in range(len(options))]
-            # 또렷이 읽히는 자세가 여럿이면 확신도가 가장 높은 것을 고른다. 처음에는 "또렷한 조각의 비율"이 가장 높은 첫 자세를 골랐는데,
-            # CYTUS LEFT 에서 15도와 30도가 둘 다 전부 또렷해 15도가 골라졌고, 그 자세로는 끝자리 3 을 0 으로, 앞자리 7 을 1 로 읽는 일이 잦았다
+            # 또렷이 읽히는 자세가 여럿이면 확신도가 가장 높은 것을 고른다. "또렷한 조각의 비율"이 가장 높은 첫 자세를 고르면,
+            # CYTUS LEFT 에서 15도와 30도가 둘 다 전부 또렷해 15도가 골라지고, 그 자세로는 끝자리 3 을 0 으로, 앞자리 7 을 1 로 읽는 일이 잦았다
             # (고정 뒤 규칙 통과율 90%. 30도로 읽는 CENTER 는 100%).
             sure = [float(np.mean([c[k] if v[k] > 0 else 0.0 for k in range(j * n, j * n + n)])) for j in range(len(options))]
             best = max(range(len(options)), key=lambda j: (clear[j] >= 0.75, sure[j]))

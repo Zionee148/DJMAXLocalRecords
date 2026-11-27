@@ -1,7 +1,7 @@
 // 판독 모델을 .NET 에서 돌렸을 때 Python 과 같은 숫자열이 나오는지, 한 장 읽는 데 얼마나 걸리는지 확인한다.
 //
 //   1) 모델만: Python 이 크기를 맞춰 둔 그림(letterboxed.bin)을 그대로 넣는다.
-//   2) 크기 맞추기까지: 원본 크기 그림(crops.bin)을 C# 으로 직접 크기를 맞춘 뒤 넣는다. 앱이 실제로 하게 될 일이다.
+//   2) 크기 맞추기까지: 원본 크기 그림(crops.bin)을 C# 으로 직접 크기를 맞춘 뒤 넣는다. 앱(ScoreModule 의 ScoreReader)이 실제로 하는 일이다.
 //
 // 실행: dotnet run -c Release -- <reader.onnx> <data\parity 폴더>
 using System.Diagnostics;

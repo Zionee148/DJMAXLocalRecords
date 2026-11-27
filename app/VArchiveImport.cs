@@ -16,7 +16,7 @@ static class VArchiveImport
    var url=$"https://v-archive.net/api/v2/archive/{encoded}/button/{button}";
    var data=await Client.GetFromJsonAsync<Response>(url).ConfigureAwait(false);
    if(data is not {Success:true,Records:not null}||data.Button!=button)
-    throw new InvalidDataException($"{button}B 기록을 확인할 수 없습니다.");
+    throw new InvalidDataException($"{button}B 기록을 받지 못함");   // 가져오기 창의 옅은 까닭 줄에 그대로 보인다(다른 까닭과 같은 '~함' 꼴)
    return data;
   })).ConfigureAwait(false);
   return Collect(catalog,responses);

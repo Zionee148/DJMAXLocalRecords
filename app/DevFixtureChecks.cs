@@ -8,7 +8,7 @@ class CheckUnavailableException(string message):Exception(message);
 static class CheckPorts
 {
  // 시험용 주 화면을 만든다. 검사 포트를 다른 프로그램이 사용 중이어서 만들지 못하면 CheckUnavailableException 을 던져 "실행 불가"로 기록되게 한다. 그 밖의 오류는 그대로 전달한다(검사가 찾아야 할 문제일 수 있다).
- // 오버레이 상태·단축키 흐름·기록 창 검사가 모두 이 메서드로 주 화면을 만든다(리뷰 docs\reviews\20261116-개발용검사정리-후속변경-리뷰.md 1번)
+ // 오버레이 상태·단축키 흐름·기록 창 검사가 모두 이 메서드로 주 화면을 만든다
  public static T Open<T>(int port,Func<T> create)
  {
   try{return create();}
@@ -17,7 +17,7 @@ static class CheckPorts
  }
 }
 
-// 개발용 검사에 쓰는 합성 자료를 만든다(2026-11-16, 기획서 docs\plans\20261116-개발용검사정리-기획서.md 3절).
+// 개발용 검사에 쓰는 합성 자료를 만든다.
 // 개인 기록·설정을 읽지 않는다. 곡 목록(data\catalog.json)만 읽어 정해진 규칙으로 만들기 때문에 어느 PC 에서 만들어도 같은 내용이다.
 //
 // 실행: DJMAXLocalRecords.exe --dev-fixtures     (개인 기록이 없는 새 시험 폴더에 복사한 Debug 빌드에서)
@@ -25,7 +25,7 @@ static class CheckPorts
 //   records.json                    합성 기록 3,200개(프로필 하나). --records-modal-check, --store-optimization-check 가 읽는다
 //   dev-fixtures\varchive\button-4.json, button-5.json, button-6.json, button-8.json
 //                                   V아카이브 응답 형식을 따른 합성 표본. --release-feature-check 가 읽는다
-// 실행 파일 옆에 records.json 이 이미 있으면 만들지 않고 멈춘다(남의 기록을 덮지 않는다).
+// ‘UserData’에 records.json 이 이미 있으면 만들지 않고 멈춘다(남의 기록을 덮지 않는다).
 static class DevFixtureChecks
 {
  public const int RecordCount=3200;
@@ -34,9 +34,9 @@ static class DevFixtureChecks
 
  public static void Run(Catalog catalog)
  {
-  string records=Path.Combine(AppContext.BaseDirectory,"records.json");
+  string records=UserFiles.At("records.json");
   foreach(string end in new[]{"",".bak",".tmp"})
-   if(File.Exists(records+end))throw new CheckUnavailableException($"실행 파일 옆에 {Path.GetFileName(records)+end} 이 이미 있다. 합성 자료는 기록이 없는 새 시험 폴더에서만 만든다.");
+   if(File.Exists(records+end))throw new CheckUnavailableException($"‘UserData’에 {Path.GetFileName(records)+end} 이 이미 있다. 합성 자료는 기록이 없는 새 시험 폴더에서만 만든다.");
   int written=WriteRecords(catalog,records);
   var counts=WriteVArchive(catalog,VArchiveFolder);
   File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"dev-fixtures","made.json"),JsonSerializer.Serialize(new{records=written,profile=ProfileName,varchive=counts},new JsonSerializerOptions{WriteIndented=true}));
@@ -58,10 +58,10 @@ static class DevFixtureChecks
    var key=new Selection(song.Id,chart.Button,chart.Pattern,judges[(which+round)%3],0).Key;   // 같은 채보는 바퀴마다 다른 판정이라 겹치지 않는다
    int raw=i%97==0?1000000:800000+(int)(Unit(i,1)*200000);
    var at=start.AddHours(i);
-   store.Active.Records[key]=new Score(ScoreValue.Rate(raw),at,1+(int)(Unit(i,2)*40),at.AddMinutes(30),raw);
+   store.Active.Plays.Add(new(store.Active.NextSeq++,key,raw,at,PlaySource.Play));   // 판정마다 한 판(직접 저장한 판)
   }
   store.Save();
-  return store.Active.Records.Count;
+  return store.Keys().Count();
  }
 
  // V아카이브의 버튼별 응답(https://v-archive.net/api/v2/archive/{닉네임}/button/{버튼})과 같은 칸 이름·값의 종류로 만든다.

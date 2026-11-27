@@ -60,7 +60,7 @@ def decode(logits: torch.Tensor):
             last = c
         texts.append("".join(digits))
     # 확신도 = 모델이 그 숫자열에 준 확률 (글자 경계가 한 칸 밀리는 경우까지 모두 더한 값).
-    # 칸마다의 확률을 곱하던 예전 방식은 경계가 애매하다는 이유만으로 맞게 읽은 값의 확신도가 0.2 까지 떨어졌다.
+    # 칸마다의 확률을 곱하면 경계가 애매하다는 이유만으로 맞게 읽은 값의 확신도가 0.2 까지 떨어진다.
     flat = torch.tensor([int(ch) for t in texts for ch in t], dtype=torch.long)
     lengths = torch.tensor([len(t) for t in texts])
     steps = torch.full((logp.shape[0],), logp.shape[1])

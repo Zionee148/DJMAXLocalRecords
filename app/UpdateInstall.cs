@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 namespace LadderRecords;
 
-// 자동 업데이트: 프로그램 파일을 바꾸고, 실패하면 되돌리고, 백업을 남기고 정리하는 부분 (기획서 5·6·7절).
+// 자동 업데이트: 프로그램 파일을 바꾸고, 실패하면 되돌리고, 백업을 남기고 정리하는 부분.
 //
 // 프로그램 폴더 안의 자리
 //   update\download\            내려받는 배포 파일(끝나면 지운다)
@@ -91,9 +91,9 @@ sealed class UpdatePaths(string appDir)
 static class UpdateBackup
 {
  public const string InfoName="backup-info.json";
- /// <summary>수동 업데이트·복구의 안내가 있는 주소. 프로그램 폴더에는 안내 파일을 따로 두지 않는다.
- /// 이 주소는 이미 배포한 버전들이 계속 가리키므로 바꾸지 않는다(저장소의 첫 화면이고, 자세한 사용법은 거기서 이어진다).</summary>
- public const string GuidePage="https://github.com/Zionee148/DJMAXLocalRecords";
+ /// <summary>수동 업데이트·복구의 안내가 있는 주소(공개 저장소의 guide\update.md. 화면에는 '업데이트·복구 안내'라는 이름 아래에 보인다). 프로그램 폴더에는 안내 파일을 따로 두지 않는다.
+ /// v1.1.x 까지는 저장소의 첫 화면을 가리켰다. 이미 배포한 버전은 그 주소를 계속 보이므로 저장소의 첫 화면도 그대로 둔다.</summary>
+ public const string GuidePage="https://github.com/Zionee148/DJMAXLocalRecords/blob/main/guide/update.md";
  /// <summary>백업의 실행 파일로 이전 버전으로 되돌리는 방법(백업에 옛 프로그램이 온전히 있을 때 알린다).</summary>
  public static string HowToRestore(string backupDir)=>"이전 버전으로 되돌리려면 아래 파일을 실행해 주세요(되돌릴지 묻는 창이 뜹니다).\n"+Path.Combine(Program(backupDir),UpdateManifest.Executable)+"\n자세한 안내: "+GuidePage;
  /// <summary>손으로 복사해 되돌리는 방법(프로그램 파일이 섞였거나 백업의 실행 파일이 켜지지 않을 때 알린다).</summary>
@@ -123,7 +123,7 @@ static class UpdateBackup
   WriteInfo(folder,new(UpdateManifest.ProductName,AppVersion.Plain(from),AppVersion.Plain(to),UpdatePaths.Now,false));
   foreach(string file in UpdateFiles.DataFiles)
   {
-   string source=Path.Combine(paths.App,file);
+   string source=Path.Combine(UserFiles.Used(paths.App),file);   // 'UserData'의 것(그 폴더가 아직 없는 프로그램 폴더면 실행 파일 옆의 것)
    if(!File.Exists(source))continue;
    string copy=Path.Combine(Data(folder),file);
    string before=UpdateFiles.Sha256(source);
@@ -161,7 +161,13 @@ static class UpdateBackup
 }
 
 /// <summary>Done: 바꿨다. 아니면 Restored 가 true 일 때 바꾸기 전으로 되돌려 놓았고, false 면 되돌리지 못해 파일이 섞여 있을 수 있다.</summary>
-record SwapResult(bool Done,bool Restored,string? Error,string? RestoreError=null);
+record SwapResult(bool Done,bool Restored,string? Error,string? RestoreError=null)
+{
+ /// <summary>바꾸지 못한 까닭이 다른 프로그램이 파일을 쓰고 있어서인가(공유 위반·잠금 위반). 안내가 "파일을 사용 중인 프로그램을 닫아 달라"고 할지를 가른다(실제 오류가 다르면 사용 중이라고 단정하지 않는다)</summary>
+ public bool InUse{get;init;}
+ /// <summary>입출력 오류가 다른 프로그램이 파일을 쓰고 있어서 난 것인가(Windows 오류 32 공유 위반, 33 잠금 위반)</summary>
+ public static bool IsInUse(Exception e)=>e is IOException&&(e.HResult&0xFFFF) is 32 or 33;
+}
 
 static class UpdateSwap
 {
@@ -256,19 +262,22 @@ static class UpdateSwap
  }
  /// <summary>풀어 놓은 새 버전(목록이 확인된 것)에서 들여올 파일의 이름: 목록의 파일들과 목록 파일.</summary>
  public static List<string> Incoming(string stagedApp)
-  =>(UpdateManifest.Read(stagedApp)??throw new UpdateException("풀어 놓은 새 버전의 프로그램 파일 목록을 읽지 못했습니다.")).Files.Select(file=>file.Path).Append(UpdateManifest.FileName).ToList();
+  =>(UpdateManifest.Read(stagedApp)??throw new UpdateException("풀어 놓은 새 버전의 프로그램 파일 목록을 읽지 못했습니다.",UpdateTrouble.BadFile)).Files.Select(file=>file.Path).Append(UpdateManifest.FileName).ToList();
  /// <summary>겹치는 것을 알리는 글의 목록 부분(많으면 앞의 몇 개만).</summary>
- public static string Listed(string appDir,IReadOnlyList<string> names)
-  =>string.Join("\n",names.Take(5).Select(name=>"  "+Path.Combine(appDir,UpdateFiles.Local(name))))+(names.Count>5?$"\n  (그 밖에 {names.Count-5}개)":"");
+ public static string Listed(string appDir,IReadOnlyList<string> names)=>string.Join("\n",ListedLines(appDir,names).Select(line=>"  "+line));
+ /// <summary>겹치는 것의 줄들: 앞의 다섯은 전체 경로, 더 있으면 "(그 밖에 N개)"</summary>
+ public static List<string> ListedLines(string appDir,IReadOnlyList<string> names)
+  =>names.Take(5).Select(name=>Path.Combine(appDir,UpdateFiles.Local(name))).Concat(names.Count>5?new[]{$"(그 밖에 {names.Count-5}개)"}:Array.Empty<string>()).ToList();
 
  /// <summary>새 버전의 파일(bring)을 들여와도 되는 폴더인지 본다. 안 되면 UpdateException. 프로그램을 바꾸기 전에 부른다.</summary>
  public static void CheckPlace(string appDir,IReadOnlyList<string> bring)
  {
   if(UpdateManifest.Read(appDir)==null)
-   throw new UpdateException($"지금 설치된 프로그램의 파일 목록({UpdateManifest.FileName})이 없거나 읽히지 않아, 어느 파일을 바꿔도 되는지 알 수 없습니다.\n자동으로 업데이트할 수 없습니다. 새 버전을 직접 받아 설치해 주세요.\n자세한 안내: "+UpdateBackup.GuidePage);
+   throw new UpdateException($"지금 설치된 프로그램의 파일 목록({UpdateManifest.FileName})이 없거나 읽히지 않습니다.",UpdateTrouble.NoList);
   var clash=Conflicts(appDir,Current(appDir),bring);
+  // 이 글은 안내창의 '오류 내용'에 접힌다. 다음 행동과 안내 주소는 안내창의 본문에 있으므로 까닭과 목록만 적는다
   if(clash.Count>0)
-   throw new UpdateException("프로그램 폴더에 새 버전의 파일과 이름이 같은 파일이나 폴더가 있습니다. 이 프로그램의 파일이 아니어서 덮어쓰지 않고 멈췄습니다.\n아래의 것을 다른 곳으로 옮긴 뒤 다시 업데이트해 주세요.\n"+Listed(appDir,clash));
+   throw new UpdateException("이 프로그램의 것이 아닌 같은 이름의 파일이나 폴더가 있습니다:\n"+Listed(appDir,clash),UpdateTrouble.Clash,appDir,ListedLines(appDir,clash));
  }
 
  /// <summary>프로그램 파일을 바꾼다: appDir 의 park 파일들을 parkDir 로 옮겨 두고, sourceDir 의 bring 파일들을 appDir 로 들여온다(move 면 옮기고 아니면 복사한다).
@@ -288,10 +297,10 @@ static class UpdateSwap
     long size=expected!=null&&expected.TryGetValue(file,out var listed)?listed.Size:new FileInfo(source).Length;
     string hash=expected!=null&&expected.TryGetValue(file,out listed)?listed.Sha256:UpdateFiles.Sha256(source);
     // 치워 둔 뒤에도 그 자리에 무엇이 있으면 우리가 아는 프로그램 파일이 아니다. 덮어쓰지 않고 멈춘다(되돌릴 때 지우지도 않는다)
-    if(File.Exists(target)||Directory.Exists(target))throw new IOException("들여올 자리에 다른 것이 있습니다: "+file);
+    if(File.Exists(target)||Directory.Exists(target))throw new IOException("새 파일을 둘 자리에 다른 파일이 있습니다: "+file);
     brought.Add(file);
     if(move)Move(source,target);else Copy(source,target);
-    if(new FileInfo(target).Length!=size||!string.Equals(UpdateFiles.Sha256(target),hash,StringComparison.OrdinalIgnoreCase))throw new IOException("들여온 파일이 원본과 다릅니다: "+file);
+    if(new FileInfo(target).Length!=size||!string.Equals(UpdateFiles.Sha256(target),hash,StringComparison.OrdinalIgnoreCase))throw new IOException("옮겨 놓은 파일이 원본과 다릅니다: "+file);
    }
    log($"프로그램 파일 {brought.Count}개를 들여옴: {sourceDir}");
    Tidy(appDir,park);
@@ -312,9 +321,9 @@ static class UpdateSwap
    for(int i=parked.Count-1;i>=0;i--)
     try{Move(At(parkDir,parked[i]),At(appDir,parked[i]));}
     catch(Exception undo)when(undo is IOException or UnauthorizedAccessException){problems.Add(parked[i]+": "+undo.Message);}
-   if(problems.Count==0){log("바꾸기 전으로 되돌림");return new(false,true,e.Message);}
+   if(problems.Count==0){log("바꾸기 전으로 되돌림");return new(false,true,e.Message){InUse=SwapResult.IsInUse(e)};}
    log("되돌리지 못한 파일: "+string.Join(" | ",problems));
-   return new(false,false,e.Message,string.Join("\n",problems.Take(5)));
+   return new(false,false,e.Message,string.Join("\n",problems.Take(5))){InUse=SwapResult.IsInUse(e)};
   }
  }
  /// <summary>파일을 옮긴 뒤 비어 버린 폴더를 지운다(비어 있지 않으면 그대로 둔다. 프로그램 폴더 자체와 개인 자료의 폴더는 건드리지 않는다).</summary>
@@ -346,13 +355,14 @@ static class UpdatePrepare
    Directory.CreateDirectory(paths.Root);string probe=Path.Combine(paths.Root,"write-test-"+Guid.NewGuid().ToString("N"));
    File.WriteAllText(probe,"");File.Delete(probe);
   }
+  // 아래 두 글은 안내창의 '오류 내용'에 접힌다. 폴더의 경로와 다음 행동은 안내창의 본문에 있으므로 까닭만 적는다
   catch(Exception e)when(e is IOException or UnauthorizedAccessException)
   {
-   throw new UpdateException("프로그램 폴더에 쓸 수 없어 업데이트할 수 없습니다. 폴더를 쓸 수 있는 곳(예: 문서, 바탕 화면)으로 옮긴 뒤 다시 해 주세요.\n폴더: "+paths.App);
+   throw new UpdateException("프로그램 폴더에 파일을 만들지 못했습니다. ("+e.Message+")",UpdateTrouble.Locked,paths.App);
   }
   // 가장 많이 쓸 때: 풀어 놓은 것 + 프로그램 폴더로 복사한 것(옛 파일은 같은 디스크의 백업 폴더로 옮기기만 한다). 푼 크기는 받아 봐야 알므로 배포 파일의 몇 배로 잡는다
-  long needed=packageBytes*5+(64L<<20);
-  if(paths.FreeBytes()<needed)throw new UpdateException($"디스크의 빈 공간이 모자랍니다. {needed/1048576.0:N0}MB 이상이 필요합니다.");
+  long needed=packageBytes*5+(64L<<20),free=paths.FreeBytes();
+  if(free<needed)throw new UpdateException($"남은 빈 공간은 {free/1048576.0:N0} MB이고, 업데이트에는 {needed/1048576.0:N0} MB 이상이 필요합니다.",UpdateTrouble.NoSpace,paths.App,null,needed);
  }
 
  /// <summary>지난 시도가 남긴 내려받던 파일과 풀어 놓은 것을 지운다.</summary>
@@ -370,12 +380,12 @@ static class UpdatePrepare
   await Task.Run(()=>{UpdateStartup.StopCleaning();CheckFolder(paths,release.Size);UpdateSwap.SetAside(paths);Clear(paths);},cancel);
   paths.Log($"업데이트 시작: {AppVersion.Text(AppVersion.Current)} → {AppVersion.Text(release.Version)}  ({release.Url})");
   string zip=Path.Combine(paths.Download,release.AssetName);
-  await UpdatePackage.Download(release,zip,(done,total)=>report(Download,$"{done/1048576.0:N1} / {total/1048576.0:N1}MB",(double)done/total),cancel);
+  await UpdatePackage.Download(release,zip,(done,total)=>report(Download,$"{done/1048576.0:N1} / {total/1048576.0:N1} MB",(double)done/total),cancel);
   cancel.ThrowIfCancellationRequested();
 
-  report(Verify,"받은 파일을 견주는 중",null);
+  report(Verify,"받은 파일을 확인하는 중",null);
   await Task.Run(()=>UpdatePackage.VerifyDownload(zip,release),cancel);
-  report(Verify,"푸는 중",null);
+  report(Verify,"압축을 푸는 중",null);
   await Task.Run(()=>UpdatePackage.Extract(zip,paths.Staging,release.Version,cancel),cancel);
   UpdateSwap.RemoveFolder(paths.Download);
   paths.Log("배포 파일 확인 끝");
@@ -385,7 +395,8 @@ static class UpdatePrepare
 
   report(Backup,"기록과 설정을 백업하는 중",null);
   long staged=await Task.Run(()=>UpdateFiles.Under(paths.StagedApp).Sum(file=>new FileInfo(Path.Combine(paths.StagedApp,UpdateFiles.Local(file))).Length),cancel);
-  if(paths.FreeBytes()<staged+(64L<<20))throw new UpdateException("디스크의 빈 공간이 모자라 프로그램을 바꿀 수 없습니다.");
+  long room=paths.FreeBytes(),need=staged+(64L<<20);
+  if(room<need)throw new UpdateException($"남은 빈 공간은 {room/1048576.0:N0} MB이고, 프로그램 파일을 바꾸려면 {need/1048576.0:N0} MB 이상이 필요합니다.",UpdateTrouble.NoSpace,paths.App,null,need);
   try
   {
    string name=await Task.Run(()=>UpdateBackup.Create(paths,AppVersion.Current,release.Version),cancel);
@@ -394,7 +405,7 @@ static class UpdatePrepare
   }
   catch(Exception e)when(e is IOException or UnauthorizedAccessException)
   {
-   throw new UpdateException("기록과 설정을 백업하지 못해 프로그램을 바꾸지 않았습니다. ("+e.Message+")");
+   throw new UpdateException("기록과 설정을 백업하지 못했습니다. ("+e.Message+")",UpdateTrouble.Backup,paths.Backups);
   }
  }
 
@@ -416,20 +427,21 @@ static class UpdatePrepare
   {
    var start=new ProcessStartInfo(executable){UseShellExecute=false,WorkingDirectory=Path.GetDirectoryName(executable)!};
    start.ArgumentList.Add(flag);start.ArgumentList.Add(Environment.ProcessId.ToString());start.ArgumentList.Add(signal);
-   process=Process.Start(start)??throw new UpdateException(what+"을 시작하지 못했습니다.");
+   process=Process.Start(start)??throw new UpdateException(what+"을 시작하지 못했습니다.",UpdateTrouble.HandOver);
   }
-  catch(System.ComponentModel.Win32Exception e){throw new UpdateException(what+"을 시작하지 못했습니다. ("+e.Message+")");}
+  catch(System.ComponentModel.Win32Exception e){throw new UpdateException(what+"을 시작하지 못했습니다. ("+e.Message+")",UpdateTrouble.HandOver);}
   using(process)
   {
    var waited=Stopwatch.StartNew();
    while(!ready.WaitOne(200))
    {
-    if(process.HasExited)throw new UpdateException(what+"이 시작되자마자 끝났습니다. 프로그램은 바뀌지 않았습니다.");
+    // 아래 두 글은 안내창의 '오류 내용'에 접힌다. 프로그램이 바뀌지 않았다는 것은 본문에 있으므로 까닭만 적는다
+    if(process.HasExited)throw new UpdateException(what+"이 시작되자마자 종료되었습니다.",UpdateTrouble.HandOver);
     if(waited.Elapsed>TimeSpan.FromSeconds(40))
     {
      // 우리가 방금 켠 프로세스다. 응답이 없으면 끝내고 지금 버전을 계속 쓴다
      try{process.Kill();}catch(InvalidOperationException){}catch(System.ComponentModel.Win32Exception){}
-     throw new UpdateException(what+"이 응답하지 않습니다. 프로그램은 바뀌지 않았습니다.");
+     throw new UpdateException(what+"이 40초 동안 응답하지 않았습니다.",UpdateTrouble.HandOver);
     }
    }
   }

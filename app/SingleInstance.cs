@@ -27,7 +27,7 @@ static class SingleInstance
    if(BringForward())return false;
    Thread.Sleep(200);
   }
-  NoticeDialog.ShowAlone("디맥 개인 기록 저장 오버레이","이미 실행 중입니다.");
+  GuideDialog.ShowAlone(StartGuides.AlreadyRunning);
   return false;
  }
 

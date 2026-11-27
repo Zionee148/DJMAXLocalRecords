@@ -32,7 +32,6 @@
 사람이 화면을 보는 도구는 여기서 돌리지 않는다(끝나지 않는 도구다). 시험 폴더에서 직접 켠다.
     data\\devchecks\\<결과 이름>\\app\\DJMAXLocalRecords.exe --overlay-check     오버레이를 상태별로 보기
     data\\devchecks\\<결과 이름>\\app\\DJMAXLocalRecords.exe --hotkey-probe      실제 키를 눌러 단축키 흐름 보기
-무엇을 보고 어떻게 끝내는지는 docs\\개발용검사-사용법.md 에 있다(지난 시험과 조사의 기록은 docs\\기록\\개발용검사.md).
 
 검사들은 창을 띄운다(주 화면, 기록 목록 창, 확인 창). 포트 18766·18769·18770 과 전역 단축키 Ctrl+Alt+Shift+F1~F5 를 잠깐 쓴다.
 개인용 앱(포트 18765, Ctrl+F8~F12)과는 겹치지 않는다. 실제 게임, 실제 V아카이브 접속, 실제 키 입력은 쓰지 않는다.
@@ -52,7 +51,7 @@ OUT = ROOT / "data" / "devchecks"
 EXE = "DJMAXLocalRecords.exe"
 
 # 빌드 폴더에서 가져오지 않는 것: 기록·설정, 지난 검사가 남긴 것
-SKIP_NAMES = {"records.json", "records.json.bak", "records.json.tmp", "hotkeys.json", "preferences.json", "records-view.json",
+SKIP_NAMES = {"records.json", "records.json.bak", "records.json.tmp", "hotkeys.json", "preferences.json", "records-view.json", "UserData",
               "appearance.json", "test-error.txt", "test-data", "diagnostics", "diagnostics-check", "dev-fixtures", "probe-preferences.json",
               "update", "update-test.json", "update-official-check.txt"}
 SKIP_ENDS = ("-validation.json", "-validation.txt", "-preview.png", "-preview-dark.png")

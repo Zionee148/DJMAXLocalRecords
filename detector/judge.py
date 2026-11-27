@@ -1,13 +1,14 @@
-"""등록 요청의 판단(확정·보류·실패)을 SCORE 모듈 계약서 3절대로 흉내 낸다. 그림은 읽지 않고, 이미 읽어 둔 프레임별 판독(locate_video 의 npz)을 시간 순서대로 입력으로 전달한다.
+"""등록 요청의 판단(확정·보류·실패)을 흉내 낸다. 그림은 읽지 않고, 이미 읽어 둔 프레임별 판독(locate_video 의 npz)을 시간 순서대로 입력으로 전달한다.
 
 모듈이 하는 일을 시간 순서대로 따라간다(각 시점에 그때까지 받은 프레임만으로 정한다).
-  - 플레이 중: 고정 뒤의 화면을 낮은 빈도(PLAY_EVERY)로 읽어 둔다. 쓰는 곳은 노트 수 맞추기와 검산뿐이다(계약서 3-1).
-  - 요청 뒤: 캡처 간격(CAPTURE)마다 온 화면만 최종 값의 근거로 쓴다(3-2). 기한은 요청부터 DEADLINE.
-  - 채택 조건은 3-3 의 일곱 가지. 하나라도 어긋나면 값을 내지 않는다.
+  - 플레이 중: 고정 뒤의 화면을 낮은 빈도(PLAY_EVERY)로 읽어 둔다. 쓰는 곳은 노트 수 맞추기와 검산뿐이다.
+  - 요청 뒤: 캡처 간격(CAPTURE)마다 온 화면만 최종 값의 근거로 쓴다. 기한은 요청부터 DEADLINE.
+  - 채택 조건: 플레이 중 근거(play_reason)가 있고, 점수로 볼 수 있는 값(value_ok)이 요청 뒤 서로 다른 캡처 NEED 장 이상에서
+    같은 값으로 이어져야 한다. 하나라도 어긋나면 값을 내지 않는다.
 
-언제 답하는가(계약서의 결정 항목 D3 "곡이 끝나기 전에 등록 키를 누른 경우"와 얽힌 부분)는 두 방식을 모두 재 본다.
+언제 답하는가(곡이 끝나기 전에 등록 키를 누른 경우와 얽힌 부분)는 두 방식을 모두 재 본다.
   - fast  : 요청 뒤 같은 값이 서로 다른 캡처 3장 이상에서, STABLE_FOR 초 이어져 읽히면 답한다. **모듈이 쓰는 방식이다**
-            (2026-11-13 확정: 곡이 끝나기 전에 눌러도 되게 하는 기능은 넣지 않는다).
+            (곡이 끝나기 전에 눌러도 되게 하는 기능은 넣지 않는다).
   - settle: (쓰지 않는다. 견줌용) 점수판이 화면에서 사라질 때까지(앱의 알림, 또는 모듈이 본 "더는 안 읽힘") 지켜보고, 사라지기 직전의 마지막 값을 답한다.
             곡이 끝나기 전에 눌러도 되게 하려는 것이다. 사라지기 전에는 그 값이 최종인지 알 수 없다(쉬는 구간에서도 0.3초쯤은 값이 멈춘다).
 
@@ -27,21 +28,21 @@ from .score_rules import fit_notes, lattice_m, refine_notes, verify_sequence
 from . import inputs
 from .selftrain import ROOT
 
-PLAY_EVERY = 0.2          # 플레이 중 읽는 간격(초). 계약서 3-1: 1초에 2~5번
+PLAY_EVERY = 0.2          # 플레이 중 읽는 간격(초). 1초에 2~5번 읽는 낮은 빈도
 CAPTURE = 0.1             # 요청 뒤 캡처 간격(초). 앱의 설정값이며 보장값이 아니다
 DEADLINE = 8.0            # 요청부터 기한(초)
-NEED = 3                  # 같은 값으로 읽힌 서로 다른 캡처의 수 (3-3 의 1)
+NEED = 3                  # 같은 값으로 읽힌 서로 다른 캡처의 수
 STABLE_FOR = 0.5          # 그 캡처들의 처음과 끝 사이가 이만큼(초)은 돼야 한다: 같은 값이 0.5초 이어져야 답한다.
                           # 녹화 270개 가운데 2개는 키가 최종 점수보다 0.23·0.40초 먼저 눌렸다(곡 끝에 맞춰 누르다 마지막 노트 직전에 눌림).
                           # 캡처 3장만 보면 캡처가 촘촘할 때(0.033초) 0.07초 만에 답해 최종 직전 값을 냈다.
                           # 0.5초면 최종보다 0.5초 일찍 눌러도 270개 모두 맞고(캡처 0.033~0.2초), 0.7초부터는 최종 점수가 그만큼 떠 있지 않은 2~3개를 못 낸다
-SHORT_FOR = 0.3           # 사라지면 직전 값(2026-11-14 확정): 0.5초를 채우기 전에 점수가 사라졌을 때, 그 직전에 같은 값이 이만큼(초)은 이어졌어야 한다
+SHORT_FOR = 0.3           # 사라지면 직전 값: 0.5초를 채우기 전에 점수가 사라졌을 때, 그 직전에 같은 값이 이만큼(초)은 이어졌어야 한다
 NEED_SHORT = 3            # 그 사이의 서로 다른 캡처 수
 GONE_FOR = 2.0            # 점수로 볼 값이 이만큼(초) 내리 안 보이면 사라진 것으로 본다. 1.0 이면 곡 중간에 눌렀을 때 연출에 가려진 것을 사라진 것으로 보는 일이
-                          # 19,376번 중 20번 있었고 2.0 이면 없었다(docs\기록\앱연결.md). 그래서 2.0 으로 확정했다(2026-11-14). SHORT_FOR 0.3 도 그때 확정한 값이다
-MIN_PLAY_VALUES = 8       # 플레이 중 규칙을 통과한 서로 다른 값 (3-3 의 5)
-MIN_AGREE = 0.6           # 또렷이 읽힌 값 가운데 규칙을 통과한 비율 (3-3 의 7)
-MAX_NOTES_PER_SECOND = 50 # 3-3 의 4: 마지막 플레이 값에서 그 사이 시간에 오를 수 있는 한도 (넉넉하게 잡은 값)
+                          # 19,376번 중 20번 있었고 2.0 이면 없었다. 그래서 2.0 으로 둔다
+MIN_PLAY_VALUES = 8       # 플레이 중 규칙을 통과한 서로 다른 값
+MIN_AGREE = 0.6           # 또렷이 읽힌 값 가운데 규칙을 통과한 비율
+MAX_NOTES_PER_SECOND = 50 # 마지막 플레이 값에서 그 사이 시간에 오를 수 있는 한도 (넉넉하게 잡은 값)
 GONE = 4.0                # settle: 점수가 이만큼(초) 내리 안 보이면 점수판이 사라진 것으로 본다. 피버 연출(길어야 2~4초)보다 길어야 한다.
                           # 1.0 으로 뒀을 때는 일찍 누른 뒤 연출에 가려진 것을 "사라짐"으로 보고 곡 중간 값을 낸 일이 있었다(270개 중 3초 일찍 2건, 6초 일찍 8건)
 LEFT_LAG = 0.3            # 앱이 화면이 바뀐 것을 알리기까지 걸린다고 친 시간(초). 흉내일 뿐 잰 값이 아니다
@@ -80,7 +81,8 @@ def play_evidence(at, values, clear, locked, pressed_at: float):
 
 
 def play_reason(play: dict) -> str:
-    """요청 하나에 걸리는 조건(3-3 의 5·7, 3-4). 통과하면 빈 문자열."""
+    """요청 하나에 걸리는 플레이 중 근거의 조건. 노트 수를 맞췄고 규칙을 통과한 서로 다른 값이 MIN_PLAY_VALUES 이상이어야 하고
+    (아니면 NotEnoughPlayEvidence), 통과 비율이 MIN_AGREE 이상이어야 한다(아니면 RuleConflict). 통과하면 빈 문자열."""
     if play["NoteCount"] == 0 or play["PlayValuesVerified"] < MIN_PLAY_VALUES:
         return "NotEnoughPlayEvidence"
     if play["Agree"] < MIN_AGREE:
@@ -89,7 +91,7 @@ def play_reason(play: dict) -> str:
 
 
 def value_ok(value: int, when: float, play: dict) -> bool:
-    """3-3 의 3·4·6: 0 이 아니고, 산식으로 나올 수 있고, 마지막 플레이 값보다 작지 않으며, 그 사이 시간에 오를 수 있는 만큼만 올랐다."""
+    """0 이 아니고, 산식으로 나올 수 있고, 마지막 플레이 값보다 작지 않으며, 그 사이 시간에 오를 수 있는 만큼만 올랐다."""
     if value <= 0 or play["NoteCount"] == 0 or play["LastPlayValue"] is None:
         return False
     m = lattice_m(value, play["NoteCount"])
@@ -162,7 +164,7 @@ def judge(at, values, clear, locked, pressed_at: float, mode: str, left_at: floa
         if v < 0 or not value_ok(v, now, play):
             others += v > 0
             if v >= 0:
-                run_value, run = None, []                       # 다른 것으로 읽힌 화면이 끼었다 (3-3 의 1)
+                run_value, run = None, []                       # 다른 것으로 읽힌 화면이 끼었다
             no_score_since = now if no_score_since is None else no_score_since
             if mode == "settle" and stable is not None and now - no_score_since >= GONE:
                 return finish(now)                              # 점수판이 사라졌다

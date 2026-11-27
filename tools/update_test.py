@@ -1,7 +1,7 @@
 """자동 업데이트를 시험용 빌드와 가짜 릴리즈 서버로 시험한다.
 
 쓰는 법 (프로젝트 폴더에서):
-    .venv\\Scripts\\python.exe tools\\update_test.py build <이름> [--worktree]
+    .venv\\Scripts\\python.exe tools\\update_test.py build <이름> [--worktree] [--old-from <가지나 커밋>]
     .venv\\Scripts\\python.exe tools\\update_test.py run <이름> [시나리오 …] [--keep]
     .venv\\Scripts\\python.exe tools\\update_test.py manual <이름>
 
@@ -9,12 +9,13 @@ build   시험용 빌드 셋(9.0.0, 9.0.1, 9.0.2)과 배포 파일(ZIP)을 data\
         커밋된 소스(HEAD)로 만든다. --worktree 를 주면 커밋하지 않은 작업 폴더의 소스로 만든다(개발 중에 쓴다).
         배포하는 빌드와 같은 방법(Release, .NET 실행 환경 포함)으로 만들되 시험용 표시(-p:UpdateTestSource=true)를 더한다.
         그 표시가 있는 빌드만 실행 파일 옆의 update-test.json 이 가리키는 서버에서 새 버전을 찾는다.
+        --old-from 을 주면 9.0.0 만 그 가지나 커밋의 소스로 만든다(예: release-1.1). 개인 자료를 실행 파일 옆에 두던 버전에서
+        'UserData'를 쓰는 버전으로 올라가는 것, 그 버전으로 되돌아가는 것을 실제 흐름으로 본다.
 run     시나리오마다 새 폴더(data\\updatetest\\<이름>\\runs\\<시나리오>\\app)에 9.0.0 과 합성 기록·설정을 놓고,
         이 PC 안에서만 도는 가짜 릴리즈 서버를 켜고, 프로그램을 실제로 켜서 창의 단추를 눌러 가며 확인한다.
         결과는 runs\\summary.tsv 와 summary.json, 시나리오마다 runs\\<시나리오>\\result.json 과 update.log 사본.
         통과한 시나리오의 app 폴더는 지운다(하나가 200MB 를 넘는다). --keep 을 주면 남긴다. 실패한 것은 늘 남긴다.
 manual  사람이 직접 볼 시험 폴더(data\\updatetest\\<이름>\\manual\\app)를 만들고 가짜 릴리즈 서버를 켜 둔다(Ctrl+C 로 끈다).
-        순서와 기대 결과는 docs\\기록\\자동업데이트.md 의 "직접 확인" 절.
 
 지키는 것
   - 개인 기록 폴더를 읽지도 쓰지도 않는다. 기록·설정은 곡 목록만 읽어 합성한다.
@@ -54,10 +55,59 @@ OLD, NEW, NEXT = "9.0.0", "9.0.1", "9.0.2"
 SERVER_PORT, OVERLAY_PORT, INSTANCE = 18780, 18781, "updatetest"
 MAIN_TITLE = "디맥 개인 기록 저장 오버레이"
 USER_FILES = ["records.json", "records.json.bak", "hotkeys.json", "preferences.json", "appearance.json"]
+PROGRAM_KEYS = ("Scale", "Small")   # 앱 표시 크기가 들어간 버전이 처음 켜질 때 스스로 정해 설정에 적는 칸
+SCALE_STEPS = (100, 125, 150, 175, 200)
+
+
+def preferences_sum(path: Path) -> str:
+    """설정 파일의 값 전부(키의 차례와 빈칸은 따지지 않는다). 읽을 수 없으면 파일의 해시."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return json.dumps(data, sort_keys=True, ensure_ascii=False) if isinstance(data, dict) else sha256(path)
+    except (OSError, ValueError):
+        return sha256(path)
+
+
+def same_preferences(after: str, before: str) -> bool:
+    """설정이 그대로인가.
+
+    값이 없는 칸(null)과 칸이 없는 것은 같게 본다. 업데이트 전의 설정에 앱 표시 크기의 숫자(Scale)가 없었으면, 곧 그 칸을 모르는 버전에서 처음 올라온 것이면
+    새 버전이 스스로 정해 적은 Scale·Small 만 빼고 견준다(그 숫자가 맞는지는 scale_written 이 따로 본다). 있었으면 그 숫자까지 같아야 한다.
+    테마·진단 그림·투컴(Sender) 같은 다른 칸은 언제나 같아야 한다."""
+    if after == before:
+        return True
+    try:
+        a, b = json.loads(after), json.loads(before)
+    except ValueError:
+        return False
+    if not isinstance(a, dict) or not isinstance(b, dict):
+        return False
+    a = {k: v for k, v in a.items() if v is not None}
+    b = {k: v for k, v in b.items() if v is not None}
+    if "Scale" not in b:
+        a = {k: v for k, v in a.items() if k not in PROGRAM_KEYS}
+        b = {k: v for k, v in b.items() if k not in PROGRAM_KEYS}
+    return a == b
+
+
+def scale_written(path: Path) -> bool:
+    """앱 표시 크기의 숫자가 설정에 적혀 있고 '작게 보기'의 칸이 그에 맞는가(100 이면 켬)."""
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data.get("Scale") in SCALE_STEPS and data.get("Small") == (data.get("Scale") == 100)
+    except (OSError, ValueError, AttributeError):
+        return False
+# v1.2.0 부터 프로그램이 개인 자료를 두는 폴더(app\UserFiles.cs). 그 전의 버전은 실행 파일 옆에 둔다. 시험 폴더는 옛 모양(실행 파일 옆)으로 만들고,
+# 새 버전이 처음 켜질 때 스스로 옮긴다. 옮긴 뒤에도 실행 파일 옆의 것은 원본으로 남아야 한다
+USER_DIR = "UserData"
 
 
 class Fail(Exception):
     """시나리오가 기대와 다른 것을 봤다."""
+
+
+class Skip(Exception):
+    """이 빌드로는 볼 수 없는 시나리오다(통과도 실패도 아니다)."""
 
 
 def sha256(path: Path) -> str:
@@ -68,7 +118,7 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def picture(folder: Path, skip: tuple[str, ...] = ("update", "diagnostics")) -> dict[str, str]:
+def picture(folder: Path, skip: tuple[str, ...] = ("update", "diagnostics", USER_DIR)) -> dict[str, str]:
     """폴더의 파일마다 해시. 맨 위의 skip 폴더는 뺀다."""
     found = {}
     for path in sorted(folder.rglob("*")):
@@ -80,7 +130,7 @@ def picture(folder: Path, skip: tuple[str, ...] = ("update", "diagnostics")) -> 
 
 # ───────────────────────────── 빌드
 
-def build(name: str, worktree: bool) -> int:
+def build(name: str, worktree: bool, old_from: str | None = None) -> int:
     target = OUT / name / "builds"
     if target.exists():
         print(f"멈춤: 이미 있다. 새 이름을 쓴다: {target}", file=sys.stderr)
@@ -98,14 +148,24 @@ def build(name: str, worktree: bool) -> int:
         with tarfile.open(archive) as tar:
             tar.extractall(source, filter="data")
         origin = "커밋 " + bundle.git("rev-parse", "HEAD").strip()
+    old_source = source
+    if old_from:
+        old_source = work / "src-old"
+        old_source.mkdir()
+        archive = work / "src-old.tar"
+        bundle.git("archive", "--format=tar", "-o", str(archive), old_from, "--", *bundle.SOURCES)
+        with tarfile.open(archive) as tar:
+            tar.extractall(old_source, filter="data")
+        origin += f" / {OLD} 은 {old_from}(커밋 {bundle.git('rev-parse', old_from).strip()})"
     print("소스:", origin)
-    info = {"source": origin, "made_at": f"{datetime.now():%Y-%m-%d %H:%M:%S}", "versions": {}, "packages": {}}
+    info = {"source": origin, "old_from": old_from, "made_at": f"{datetime.now():%Y-%m-%d %H:%M:%S}", "versions": {}, "packages": {}}
     for version in (OLD, NEW, NEXT):
         print(f"빌드 중: {version} (Release, .NET 실행 환경 포함, 시험용 표시)")
         notes: list[str] = []
-        publish = bundle.publish_source(source, work / ("publish-" + version), version, ("-p:UpdateTestSource=true",), notes)
+        from_source = old_source if version == OLD else source
+        publish = bundle.publish_source(from_source, work / ("publish-" + version), version, ("-p:UpdateTestSource=true",), notes)
         app = target / version / PRODUCT
-        bundle.make_app_folder(publish, source, app)
+        bundle.make_app_folder(publish, from_source, app)
         bundle.write_manifest(app, version)
         info["versions"][version] = {"files": len(bundle.files_under(app)), "bytes": sum(p.stat().st_size for p in bundle.files_under(app)),
                                      "exe_sha256": sha256(app / EXE), "notes": notes}
@@ -318,6 +378,16 @@ class Window:
             raise Fail(f"단추가 눌리지 않는 상태다: [{label}]")
         user32.PostMessageW(hwnd, BM_CLICK, 0, 0)
 
+    def expand(self, label: str) -> None:
+        """펼치는 줄(글자가 label 인 자식 창)을 편다. 단추가 아니라 프로그램이 직접 그리는 줄이라 스페이스 키를 보낸다
+        (마우스 누름을 보내면 WinForms 가 그 자리의 실제 맨 위 창을 보고 누름으로 치지 않을 때가 있다: 창이 겹쳐 있으면 펴지지 않았다)."""
+        for hwnd, _, text in self.children():
+            if text == label:
+                user32.PostMessageW(hwnd, 0x0100, 0x20, 0x00390001)   # WM_KEYDOWN, VK_SPACE
+                user32.PostMessageW(hwnd, 0x0101, 0x20, 0xC0390001)   # WM_KEYUP
+                return
+        raise Fail(f"펼치는 줄을 찾지 못했다: [{label}] (창 \"{self.title}\"의 글: {self.texts()[:300]!r})")
+
     def set_text(self, text: str) -> None:
         for hwnd, kind, _ in self.children():
             if "EDIT" in kind.upper():
@@ -389,6 +459,8 @@ class Run:
         self.seen: list[str] = []          # 지나가며 본 창의 제목과 글(증거로 남긴다)
         self.started: list[int] = []
         self.packages = builds / "packages"
+        # 9.0.0 을 옛 버전의 소스로 만들었는가(build 의 --old-from). 그 9.0.0 은 개인 자료를 실행 파일 옆에서 읽고 쓴다
+        self.old_layout = bool(json.loads((builds / "build-info.json").read_text(encoding="utf-8")).get("old_from"))
 
     # 준비
     def lay(self) -> None:
@@ -505,12 +577,48 @@ class Run:
         """이 시나리오 폴더에서 켜진 프로세스가 모두 끝나기를 기다린다."""
         self.wait(lambda: not any(pid_alive(pid) for pid in self.started) and not windows_under(self.folder), seconds, "프로세스가 모두 끝남")
 
+    def current(self, name: str) -> Path:
+        """지금 설치된 버전이 쓰는 개인 파일.
+
+        9.0.0 을 옛 버전의 소스로 만들었고 지금 설치된 것이 9.0.0 이면 실행 파일 옆의 것이다('UserData'가 이미 있어도: 새 버전을 쓰다가 되돌린 폴더).
+        그 밖에는 'UserData'가 있으면 그 안의 것, 없으면(아직 한 번도 켜지 않은 폴더) 실행 파일 옆의 것."""
+        if self.old_layout and self.version() == OLD:
+            return self.app / name
+        return self.app / USER_DIR / name if (self.app / USER_DIR).is_dir() else self.app / name
+
+    def originals(self) -> dict[str, str]:
+        """실행 파일 옆의 개인 파일(옛 버전의 자리). 새 버전이 옮긴 뒤에도 그대로 남아야 한다."""
+        return {name: sha256(self.app / name) for name in USER_FILES if (self.app / name).exists()}
+
     # 자주 쓰는 확인
     def user_data(self) -> dict[str, str]:
-        files = {name: sha256(self.app / name) for name in USER_FILES if (self.app / name).exists()}
+        # 설정 파일은 바이트가 아니라 값으로 모은다(same_user 가 same_preferences 로 견준다): 앱 표시 크기가 들어간 버전은 처음 켜질 때
+        # 고른 숫자(Scale)와 그에 맞춘 '작게 보기'(Small)를 설정에 스스로 적는다. 사용자가 정한 값은 그대로여야 한다
+        files = {name: (preferences_sum(self.current(name)) if name == "preferences.json" else sha256(self.current(name)))
+                 for name in USER_FILES if self.current(name).exists()}
         for extra in ["diagnostics/old-session.log", "내 백업/records.json", "메모.txt", "update/backup/내가 둔 폴더/note.txt", "update-test.json"]:
             files[extra] = sha256(self.app / extra)
         return files
+
+    def same_user(self, before: dict[str, str]) -> bool:
+        """지금의 개인 자료가 before 와 같은가. 설정 파일은 same_preferences 의 규칙으로, 나머지는 바이트로 견준다."""
+        now = self.user_data()
+        if now.keys() != before.keys():
+            return False
+        return all(same_preferences(now[k], before[k]) if k == "preferences.json" else now[k] == before[k] for k in now)
+
+    def old_ui(self) -> bool:
+        """지금 켜져 있는 것이 옛 버전의 소스로 만든 9.0.0 인가(build 의 --old-from). 그러면 켜져 있는 프로그램이 그리는 창
+        (업데이트 확인·진행·교체 전의 실패·작업 중 안내·지난 업데이트 중단)이 옛 글이다. 그 밖에는 새 글이다."""
+        return self.old_layout and self.version() == OLD
+
+    def old_backup_ui(self, version: str) -> bool:
+        """그 버전의 백업 실행 파일이 옛 버전의 소스인가(build 의 --old-from 으로 만든 9.0.0). 그러면 백업을 직접 열었을 때의 창과 복구 진행 창이 옛 글이다."""
+        return self.old_layout and version == OLD
+
+    def active_bytes(self) -> dict[str, str]:
+        """지금 설치된 버전이 쓰는 개인 파일의 해시(바이트 그대로). 업데이트를 누르기 직전에 찍어 두고 백업의 사본과 견준다."""
+        return {name: sha256(self.current(name)) for name in USER_FILES if self.current(name).exists()}
 
     def program(self) -> dict[str, str]:
         """프로그램 파일(목록에 있는 것)과 그 밖의 파일을 모두 본다. update, diagnostics 는 뺀다."""
@@ -544,6 +652,7 @@ class Run:
         offer = self.offer("v" + to)
         text = offer.texts()
         self.check("v" + to in text and "패치노트" in text or "시험용 릴리즈" in text, "안내 창에 새 버전과 패치노트가 보임", text[:200])
+        self.before_click = self.active_bytes()
         offer.click("업데이트")
         self.wait(lambda: self.windows() and self.version() == to and "업데이트 완료" in self.note(), seconds, f"v{to} 의 주 화면이 뜨고 업데이트 줄에 완료가 적힘", 0.15)
 
@@ -565,7 +674,7 @@ def scenario_update(run: Run) -> None:
     good, later = server.release(NEW, run.packages / "good.zip"), server.release(NEXT, run.packages / "next.zip")
     server.items = [good]
     run.lay()
-    before_user, old_exe = run.user_data(), sha256(run.app / EXE)
+    before_user, old_exe, originals = run.user_data(), sha256(run.app / EXE), run.originals()
     began = time.time()
     run.start()
     run.wait_main("새 버전 v" + NEW + " 있음")
@@ -578,13 +687,19 @@ def scenario_update(run: Run) -> None:
     run.check(server.count("/download", began) == 0 and run.main() is not None and len(run.windows()) == 1 and "새 버전" in run.note(), "나중에: 내려받지 않고 그대로 쓰며, 다시 묻는 창이 뜨지 않음")
     run.update(NEW)
     run.check(run.version() == NEW and sha256(run.app / EXE) != old_exe, "프로그램이 9.0.1 로 바뀜")
-    run.check(run.user_data() == before_user, "기록·프로필·되돌리기 이력·설정·진단 기록·사용자가 둔 파일이 그대로임")
+    run.check(run.same_user(before_user), "기록·프로필·되돌리기 이력·설정·진단 기록·사용자가 둔 파일이 그대로임")
+    run.check(scale_written(run.current("preferences.json")), "새 버전이 앱 표시 크기의 숫자를 설정에 적음(다른 설정의 값은 그대로)",
+              run.current("preferences.json").read_text(encoding="utf-8")[:200])
+    run.check((run.app / USER_DIR / "records.json").is_file() and run.originals() == originals,
+              "새 버전이 개인 자료를 'UserData'에서 쓰고, 실행 파일 옆의 원본은 그대로임", str(sorted(p.name for p in (run.app / USER_DIR).glob("*"))) if (run.app / USER_DIR).is_dir() else "폴더 없음")
     backups = run.backups()
     run.check(len(backups) == 1 and backups[0].name.startswith("v" + OLD + "-"), "직전 버전의 백업이 하나 생김", str([b.name for b in backups]))
     info = json.loads((backups[0] / "backup-info.json").read_text(encoding="utf-8"))
     run.check(info["Program"] is True and sha256(backups[0] / "program" / EXE) == old_exe, "백업에 옛 프로그램이 있음")
     run.check(sorted(p.name for p in backups[0].iterdir()) == ["backup-info.json", "data", "program"], "백업 폴더에 프로그램·기록 사본·표시 파일만 있음(안내 글 파일을 두지 않음)", str(sorted(p.name for p in backups[0].iterdir())))
-    run.check(all(sha256(backups[0] / "data" / name) == before_user[name] for name in USER_FILES), "백업에 업데이트 직전의 기록·설정 사본이 있음")
+    clicked = run.before_click
+    run.check(sorted(clicked) == sorted(p.name for p in (backups[0] / "data").iterdir()) and all(sha256(backups[0] / "data" / name) == clicked[name] for name in clicked),
+              "백업에 업데이트를 누르기 직전의 기록·설정과 바이트까지 같은 사본이 있음", str(sorted(p.name for p in (backups[0] / "data").iterdir())))
     run.no_leftovers()
     run.check(server.count("/download", began) == 1, "배포 파일을 한 번만 내려받음")
     time.sleep(2)
@@ -595,8 +710,10 @@ def scenario_update(run: Run) -> None:
     server.items = [later, good]
     time.sleep(12)
     run.check(server.count("/releases") == asked and "v" + NEXT not in run.note(), "켜 둔 동안 새 릴리즈가 나와도 스스로 다시 묻지 않음")
+    before_next = run.user_data()   # 이미 앱 표시 크기를 아는 버전의 설정: 이어지는 업데이트는 그 숫자까지 그대로 둬야 한다
+    run.check('"Scale"' in before_next["preferences.json"], "9.0.1 의 설정에 앱 표시 크기의 숫자가 있음", before_next["preferences.json"][:200])
     run.update(NEXT)
-    run.check(run.version() == NEXT and run.user_data() == before_user, "이어서 9.0.2 로 업데이트, 개인 자료 그대로")
+    run.check(run.version() == NEXT and run.same_user(before_user) and run.same_user(before_next), "이어서 9.0.2 로 업데이트, 개인 자료 그대로(앱 표시 크기의 숫자까지 직전 설정과 같음)")
     backups = run.backups()
     run.check(len(backups) == 1 and backups[0].name.startswith("v" + NEW + "-"), "성공한 뒤에는 직전 버전(9.0.1)의 백업 하나만 남음", str([b.name for b in backups]))
     run.check((run.app / "update" / "backup" / "내가 둔 폴더" / "note.txt").exists() and (run.app / "내 백업" / "records.json").exists(), "사용자가 만든 백업과 폴더는 정리되지 않음")
@@ -605,32 +722,33 @@ def scenario_update(run: Run) -> None:
     # 업데이트한 뒤에 기록이 쌓인 상태에서 이전 버전으로 되돌린다
     run.close_app()
     run.quiet()
-    records = json.loads((run.app / "records.json").read_text(encoding="utf-8"))
+    records = json.loads(run.current("records.json").read_text(encoding="utf-8"))
     records["Profiles"][0]["Records"]["varchive:999999|4|SC|하드"] = {"Accuracy": 99.99, "At": "2026-11-16T12:00:00", "PlayCount": 1, "LastPlayedAt": None, "RawScore": 999900}
-    (run.app / "records.json").write_text(json.dumps(records, ensure_ascii=False, indent=2), encoding="utf-8")
+    run.current("records.json").write_text(json.dumps(records, ensure_ascii=False, indent=2), encoding="utf-8")
     after_update = run.user_data()
     run.start()
     main = run.wait_main("v" + NEXT)
     run.wait(lambda: run.main() and run.main().button("이전 버전 복구"), 20, "[이전 버전 복구] 단추가 보임")
     run.main().click("이전 버전 복구")
-    text = run.answer("이전 버전 복구", "예", "v" + NEW, where="app")
-    run.check("그대로 둡니다" in text, "복구를 묻는 창이 기록을 그대로 둔다고 알림", text[:300])
-    run.wait(lambda: run.windows() and run.version() == NEW and "되돌림" in run.note(), 180, "9.0.1 의 주 화면이 뜨고 되돌림이 적힘", 0.15)
-    run.check(run.user_data() == after_update, "되돌린 뒤에도 업데이트 후에 쌓인 기록이 그대로임(과거 사본으로 바뀌지 않음)")
+    text = run.answer("이전 버전 복구", "복구", "v" + NEW, where="app")
+    run.check("‘UserData’ 폴더의 기록과 설정을 그대로 사용합니다" in text and "이전 버전으로 복구할까요?" in text, "복구를 묻는 창이 이전 버전도 같은 기록과 설정을 쓴다고 알림", text[:300])
+    run.wait(lambda: run.windows() and run.version() == NEW and "복구함" in run.note(), 180, "9.0.1 의 주 화면이 뜨고 '이전 버전으로 복구함'이 적힘", 0.15)   # 9.0.1 은 언제나 지금 소스다
+    run.check(run.same_user(after_update), "되돌린 뒤에도 업데이트 후에 쌓인 기록이 그대로임(과거 사본으로 바뀌지 않음)")
+    run.check(run.originals() == originals, "실행 파일 옆의 원본은 업데이트 둘과 복구를 거친 뒤에도 그대로임")
     run.check(len(run.backups()) == 1 and run.main().button("이전 버전 복구") is None, "백업은 남고, 같은 버전이라 복구 단추는 숨음")
     run.no_leftovers()
     run.close_app()
     run.quiet()
 
-    # 이전 버전이 읽지 못하는 더 새 형식의 기록: 건드리지 않고 알린다
-    records["Format"] = 2
-    (run.app / "records.json").write_text(json.dumps(records, ensure_ascii=False, indent=2), encoding="utf-8")
-    newer = sha256(run.app / "records.json")
+    # 이전 버전이 읽지 못하는 더 새 형식의 기록: 건드리지 않고 알린다(이 프로그램이 아는 형식은 2 까지이고, 저장은 형식 2 로 한다)
+    records["Format"] = 3
+    run.current("records.json").write_text(json.dumps(records, ensure_ascii=False, indent=2), encoding="utf-8")
+    newer = sha256(run.current("records.json"))
     run.start()
     text = run.answer("실행 오류", "확인", "새 버전에서 저장된 형식", 60, "app")
     run.check("건드리지 않았습니다" in text and "update\\backup" in text and "https://github.com/Zionee148/DJMAXLocalRecords" in text, "더 새 형식의 기록은 읽지 않고 선택지와 GitHub 안내를 알림", text[:400])
     run.quiet()
-    run.check(sha256(run.app / "records.json") == newer and not (run.app / "records.json.tmp").exists(), "그 기록 파일은 바뀌지 않음")
+    run.check(sha256(run.current("records.json")) == newer and not run.current("records.json.tmp").exists(), "그 기록 파일은 바뀌지 않음")
 
 
 def scenario_checks(run: Run) -> None:
@@ -651,15 +769,16 @@ def scenario_checks(run: Run) -> None:
     # 자동으로 받을 수 없는 릴리즈(첨부 파일의 이름이 다르다)
     server.items = [server.release(NEW, run.packages / "good.zip", asset="DJMAXLocalRecords.zip")]
     run.main().click("업데이트 확인")
-    text = run.answer("업데이트", "아니요", "자동으로 업데이트할 수 없습니다", where="app")
-    run.check("직접 받아야 함" in run.note() and server.count("/download") == 0, "받을 파일이 갖춰지지 않은 릴리즈는 내려받지 않고 알림", run.note())
+    old = run.old_ui()   # 옛 소스의 9.0.0 은 '예/아니요'로 묻고 업데이트 줄에 '직접 받아야 함'을 적는다
+    text = run.answer("업데이트", "아니요" if old else "닫기", "자동으로 업데이트할 수 없습니다", where="app")
+    run.check(("직접 받아야 함" if old else "직접 내려받기 필요") in run.note() and server.count("/download") == 0, "받을 파일이 갖춰지지 않은 릴리즈는 내려받지 않고 알림", run.note())
 
     # 시작할 수 없는 상태: 감지 중, 다른 창이 열려 있음
     server.items = [good]
     run.main().click("감지 시작")
     time.sleep(1)
     run.offer().click("업데이트")
-    run.answer("업데이트", "확인", "감지 중입니다", where="app")
+    run.answer("업데이트", "확인", "감지 중입니다" if run.old_ui() else "게임 화면을 감지하고 있습니다", where="app")
     run.main().click("중지 / 숨기기")
     time.sleep(1)
     run.main().click("등록한 기록 보기")
@@ -679,13 +798,13 @@ def scenario_checks(run: Run) -> None:
     run.check(len(run.windows()) == 1 and "최신" not in run.note(), "조회에 실패하면 최신 버전이라고 적지 않고 창도 띄우지 않음", run.note())
     run.main().click("업데이트 확인")
     run.answer("업데이트", "확인", "확인하지 못했습니다", where="app")
-    saved = sha256(run.app / "records.json")
+    saved = sha256(run.current("records.json"))
     run.main().click("새로")
     ask = run.dialog("새 프로필", 15, "app")
     ask.set_text("조회 실패 뒤에 만든 프로필")
     ask.click("확인")
-    run.wait(lambda: sha256(run.app / "records.json") != saved, 15, "프로필을 만들어 기록 파일이 저장됨")
-    names = [profile["Name"] for profile in json.loads((run.app / "records.json").read_text(encoding="utf-8"))["Profiles"]]
+    run.wait(lambda: sha256(run.current("records.json")) != saved, 15, "프로필을 만들어 기록 파일이 저장됨")
+    names = [profile["Name"] for profile in json.loads(run.current("records.json").read_text(encoding="utf-8"))["Profiles"]]
     run.check("조회 실패 뒤에 만든 프로필" in names, "조회에 실패해도 기존 기능(프로필 만들기와 저장)을 쓸 수 있음", str(names))
     run.close_app()
     run.quiet()
@@ -693,7 +812,8 @@ def scenario_checks(run: Run) -> None:
     for name in ("records.json", "records.json.bak", "records-view.json"):
         before_program.pop(name, None)
         program.pop(name, None)
-    run.check(program == before_program and run.version() == OLD, "프로그램 파일은 그대로임")
+    run.check(program == before_program and run.version() == OLD, "프로그램 파일은 그대로임",
+              "달라진 것: " + str(sorted(k for k in set(program) | set(before_program) if program.get(k) != before_program.get(k))))
 
 
 def scenario_cancel(run: Run) -> None:
@@ -705,29 +825,30 @@ def scenario_cancel(run: Run) -> None:
     run.start()
     run.wait_main("새 버전 v" + NEW)
     run.offer().click("업데이트")
-    progress = run.dialog("업데이트", 30, "app", "MB")
+    progress = run.dialog("업데이트", 30, "app", "MB" if run.old_ui() else "업데이트 진행")   # 새 진행 창은 첫 줄로 찾는다(새 버전 안내에도 "MB"가 있다)
     run.check(progress.button("취소") is not None and "다운로드" in progress.texts(), "진행 창에 단계와 취소 단추가 보임", progress.texts()[:200])
     time.sleep(2)
     progress.click("취소")
+    old = run.old_ui()
     text = run.answer("업데이트", "확인", "업데이트를 취소했습니다", 60, "app")
-    run.check("바뀌지 않았습니다" in text, "취소하면 바뀐 것이 없다고 알림")
-    run.check(run.program() == before_program and run.user_data() == before_user and run.version() == OLD, "프로그램과 개인 자료가 그대로임")
+    run.check("바뀌지 않았습니다" in text if old else "계속 사용할 수 있습니다" in text and "그대로입니다" in text, "취소하면 바뀐 것이 없다고 알림", text[:300])
+    run.check(run.program() == before_program and run.same_user(before_user) and run.version() == OLD, "프로그램과 개인 자료가 그대로임")
     run.check(not run.backups(), "쓰지 않은 백업 폴더가 남지 않음")
     run.no_leftovers()
     # 조작 제한이 풀렸는가: 저장이 된다
-    saved = sha256(run.app / "records.json")
+    saved = sha256(run.current("records.json"))
     run.main().click("새로")
     ask = run.dialog("새 프로필", 15, "app")
     ask.set_text("취소한 뒤에 만든 프로필")
     ask.click("확인")
-    run.wait(lambda: sha256(run.app / "records.json") != saved, 15, "프로필을 만들어 기록 파일이 저장됨")
-    names = [profile["Name"] for profile in json.loads((run.app / "records.json").read_text(encoding="utf-8"))["Profiles"]]
+    run.wait(lambda: sha256(run.current("records.json")) != saved, 15, "프로필을 만들어 기록 파일이 저장됨")
+    names = [profile["Name"] for profile in json.loads(run.current("records.json").read_text(encoding="utf-8"))["Profiles"]]
     run.check("취소한 뒤에 만든 프로필" in names, "취소한 뒤 조작 제한이 풀림(프로필을 만들고 저장함)", str(names))
     # 다시 하면 된다
     server.items = [server.release(NEW, run.packages / "good.zip")]
     after_cancel = run.user_data()
     run.update(NEW)
-    run.check(run.version() == NEW and run.user_data() == after_cancel, "취소한 뒤 다시 업데이트하면 정상으로 끝남")
+    run.check(run.version() == NEW and run.same_user(after_cancel), "취소한 뒤 다시 업데이트하면 정상으로 끝남")
     run.no_leftovers()
 
 
@@ -738,6 +859,7 @@ def scenario_download(run: Run) -> None:
     before_user, before_program = run.user_data(), run.program()
     run.start()
     # 릴리즈는 차례가 왔을 때 만든다(같은 이름의 첨부 파일을 보내는 방식이 차례마다 다르다)
+    new_words = {"끊겼": "업데이트 파일을 다 받지 못했습니다", "SHA-256": "받은 업데이트 파일이 올바르지 않습니다", "버전": "받은 업데이트 파일이 올바르지 않습니다"}
     cases = [(lambda: server.release(NEW, run.packages / "good.zip", mode="truncate"), "끊겼", "받는 도중 연결이 끊김"),
              (lambda: server.release(NEW, run.packages / "good.zip", mode="corrupt"), "SHA-256", "손상된 파일(크기는 같고 내용이 다름)"),
              (lambda: server.release("9.0.5", run.packages / "good.zip"), "버전", "고른 버전과 다른 버전이 든 파일")]
@@ -747,9 +869,11 @@ def scenario_download(run: Run) -> None:
         release = make()
         server.items = [release]
         run.offer(release["tag_name"]).click("업데이트")
-        text = run.answer("업데이트 실패", "확인", word, 120, "app")
-        run.check("계속 사용합니다" in text and "바뀌지 않았습니다" in text, f"{what}: 원인과 다음 행동을 알림", text[:300])
-        run.check(run.program() == before_program and run.user_data() == before_user and not run.backups(), f"{what}: 프로그램·개인 자료가 그대로이고 백업 폴더도 남지 않음")
+        old = run.old_ui()
+        text = run.answer("업데이트 실패", "확인", word if old else new_words[word], 120, "app")
+        run.check("계속 사용합니다" in text and "바뀌지 않았습니다" in text if old else "현재 버전(v" + OLD + ")을 계속 사용할 수 있습니다" in text and "그대로입니다" in text and "다시 시도해 주세요" in text,
+                  f"{what}: 원인과 다음 행동을 알림", text[:300])
+        run.check(run.program() == before_program and run.same_user(before_user) and not run.backups(), f"{what}: 프로그램·개인 자료가 그대로이고 백업 폴더도 남지 않음")
         run.no_leftovers()
         run.check(run.main() is not None and run.main().enabled("업데이트 확인"), f"{what}: 프로그램을 계속 쓸 수 있음")
 
@@ -763,14 +887,23 @@ def scenario_backup(run: Run) -> None:
     shutil.rmtree(run.app / "update" / "backup")
     (run.app / "update" / "backup").write_text("백업 폴더의 자리를 막는 파일\n", encoding="utf-8")
     blocker = sha256(run.app / "update" / "backup")
-    user = {name: sha256(run.app / name) for name in USER_FILES}
+    def files() -> dict[str, str]:
+        # 이 시나리오는 사용자가 둔 백업 폴더를 치웠으므로 user_data 대신 개인 파일만 본다. 설정은 같은 규칙(same_preferences)으로 견준다:
+        # 새 소스로 만든 9.0.0 은 처음 켜질 때 앱 표시 크기의 숫자를 설정에 적는다
+        return {name: (preferences_sum(run.current(name)) if name == "preferences.json" else sha256(run.current(name))) for name in USER_FILES}
+
+    def same(now: dict[str, str]) -> bool:
+        return now.keys() == user.keys() and all(same_preferences(now[k], user[k]) if k == "preferences.json" else now[k] == user[k] for k in now)
+
+    user = files()
     before_program = run.program()
     run.start()
     run.wait_main("새 버전")
     run.offer().click("업데이트")
-    text = run.answer("업데이트 실패", "확인", "백업하지 못해", 180, "app")
-    run.check("프로그램을 바꾸지 않았습니다" in text or "바뀌지 않았습니다" in text, "백업 실패: 교체하지 않았다고 알림", text[:300])
-    run.check(run.program() == before_program and {name: sha256(run.app / name) for name in USER_FILES} == user and run.version() == OLD, "백업 실패: 프로그램·개인 자료가 그대로임")
+    old = run.old_ui()
+    text = run.answer("업데이트 실패", "확인", "백업하지 못해" if old else "기록과 설정을 백업하지 못했습니다", 180, "app")
+    run.check(("프로그램을 바꾸지 않았습니다" in text or "바뀌지 않았습니다" in text) if old else "계속 사용할 수 있습니다" in text, "백업 실패: 교체하지 않았다고 알림", text[:300])
+    run.check(run.program() == before_program and same(files()) and run.version() == OLD, "백업 실패: 프로그램·개인 자료가 그대로임")
     run.check(sha256(run.app / "update" / "backup") == blocker, "막고 있던 파일은 그대로임")
     run.wait(lambda: not (run.app / "update" / "staging").exists() and not (run.app / "update" / "download").exists(), 60, "풀어 놓은 것이 치워짐")
     run.check(run.main().enabled("업데이트 확인"), "프로그램을 계속 쓸 수 있음")
@@ -785,18 +918,19 @@ def swap_failure(run: Run, package: str, prepare, release_word: str, what: str) 
     old_pid = run.start()
     run.wait_main("새 버전")
     run.offer().click("업데이트")
-    notice = run.dialog("업데이트 실패", 240, "DJMAXLocalRecords", "기존 버전으로 되돌렸습니다")
+    notice = run.dialog("업데이트 실패", 240, "DJMAXLocalRecords", "이전 버전(v" + OLD + ")으로 복구했습니다")
     text = notice.texts()
-    run.check(release_word in text and "업데이트하기 전 그대로" in text, f"{what}: 기존 버전으로 되돌렸다고 실패 원인과 함께 알림", text[:400])
+    run.check("새 버전의 파일을 설치하지 못했습니다" in text and "다시 실행합니다" in text and "오류 내용" in text and "그대로입니다" in text,
+              f"{what}: 이전 버전으로 복구했다고 알리고, 확인 뒤 다시 켜며, 실패 원인은 '오류 내용'에 둠", text[:400])
     run.check(not pid_alive(old_pid), "그때 기존 프로그램은 이미 끝나 있었음(끝난 뒤에도 안내가 보임)")
-    run.check(run.program() == before_program and run.user_data() == before_user and run.version() == OLD, f"{what}: 프로그램·개인 자료가 바꾸기 전과 똑같음")
+    run.check(run.program() == before_program and run.same_user(before_user) and run.version() == OLD, f"{what}: 프로그램·개인 자료가 바꾸기 전과 똑같음")
     if held is not None:
         held.close()
     notice.click("확인")
     run.wait_main("지난 업데이트 실패", 120)
     run.check(run.version() == OLD and not run.backups(), "기존 버전이 다시 켜지고, 쓰지 않은 백업 폴더는 남지 않음")
     run.no_leftovers()
-    run.check(run.program() == before_program and run.user_data() == before_user, "다시 켜진 뒤에도 그대로임")
+    run.check(run.program() == before_program and run.same_user(before_user), "다시 켜진 뒤에도 그대로임")
 
 
 def scenario_swap_locked(run: Run) -> None:
@@ -807,7 +941,7 @@ def scenario_swap_locked(run: Run) -> None:
 def scenario_conflict(run: Run) -> None:
     """새 버전의 파일이 올 자리에 사용자가 둔 파일·폴더가 있다 → 바꾸기 전에 멈춘다(덮어쓰지도, 백업으로 옮기지도 않는다).
 
-    옛 파일을 다 옮긴 뒤 새 파일을 들여오다 막히는 경우(교체 도중의 실패)는 이제 여기까지 오지 않는다.
+    옛 파일을 다 옮긴 뒤 새 파일을 들여오다 막히는 경우(교체 도중의 실패)는 바꾸기 전의 확인에서 먼저 멈추므로 여기까지 오지 않는다.
     그 경우의 되돌리기는 자체 검사(--self-test)의 실패 끼워 넣기가 본다.
     """
     server = run.server
@@ -818,9 +952,11 @@ def scenario_conflict(run: Run) -> None:
     def refused(what: str) -> None:
         before_user, before_program = run.user_data(), run.program()
         run.offer().click("업데이트")
+        old = run.old_ui()
         text = run.answer("업데이트 실패", "확인", "이름이 같은", 240, "app")
-        run.check("data\\new-in-901.txt" in text and "덮어쓰지 않고" in text and "바뀌지 않았습니다" in text, f"{what}: 그 이름을 대며 덮어쓰지 않고 멈췄다고 알림", text[:500])
-        run.check(run.program() == before_program and run.user_data() == before_user and run.version() == OLD, f"{what}: 프로그램·개인 자료·사용자가 둔 것이 그대로임")
+        run.check("data\\new-in-901.txt" in text and ("덮어쓰지 않고" in text and "바뀌지 않았습니다" in text if old else "계속 사용할 수 있습니다" in text and "프로그램 폴더 밖으로 옮긴" in text),
+                  f"{what}: 그 이름을 대며 멈췄다고 알리고 옮길 곳을 알려 줌", text[:500])
+        run.check(run.program() == before_program and run.same_user(before_user) and run.version() == OLD, f"{what}: 프로그램·개인 자료·사용자가 둔 것이 그대로임")
         run.check(not run.backups(), f"{what}: 백업 폴더가 남지 않음(아무것도 옮기지 않았다)")
         run.no_leftovers()
         run.check(run.main().enabled("업데이트 확인"), f"{what}: 프로그램을 계속 쓸 수 있음")
@@ -839,7 +975,7 @@ def scenario_conflict(run: Run) -> None:
     shutil.rmtree(mine)
     before_user = run.user_data()
     run.update(NEW)
-    run.check(mine.read_bytes() == b"only in 9.0.1\n" and run.version() == NEW and run.user_data() == before_user, "치운 뒤에는 업데이트되고 새 버전의 파일이 그 자리에 들어옴")
+    run.check(mine.read_bytes() == b"only in 9.0.1\n" and run.version() == NEW and run.same_user(before_user), "치운 뒤에는 업데이트되고 새 버전의 파일이 그 자리에 들어옴")
     run.no_leftovers()
 
 
@@ -860,7 +996,7 @@ def scenario_cleanup(run: Run) -> None:
         run.wait_main("새 버전")
         run.update(NEW)
         run.check(stale.exists(), "잡혀 있던 지난 파일이 끝까지 남아 있었음(지난 파일의 정리가 끝나지 못하는 조건이었다)")
-        run.check(run.version() == NEW and run.user_data() == before_user, "그 사이에 한 업데이트가 끝까지 됨, 개인 자료 그대로")
+        run.check(run.version() == NEW and run.same_user(before_user), "그 사이에 한 업데이트가 끝까지 됨, 개인 자료 그대로")
     run.no_leftovers()
 
 
@@ -880,34 +1016,43 @@ def bad_start(run: Run):
 def scenario_badstart_rollback(run: Run) -> None:
     """새 버전이 켜지지 않는다 → 설치를 맡은 쪽이 묻고 이전 버전으로 되돌린다."""
     before_user, before_program = bad_start(run)
-    ask = run.dialog("업데이트", 60, "DJMAXLocalRecords", "정상으로 시작되지 않았습니다")
+    ask = run.dialog("업데이트", 60, "DJMAXLocalRecords", "정상적으로 시작되지 않았습니다")
     text = ask.texts()
-    run.check("이전 버전(v" + OLD + ")으로 되돌릴까요?" in text and "그대로 둡니다" in text, "새 버전이 켜지지 않으면 성공으로 치지 않고 되돌릴지 물음", text[:400])
+    run.check("이전 버전으로 복구할까요?" in text and "v" + OLD in text and "v" + NEW in text and "그대로 사용합니다" in text and ask.button("새 버전 유지"),
+              "새 버전이 켜지지 않으면 성공으로 치지 않고 이전 버전으로 복구할지 물음(기본은 새 버전 유지)", text[:400])
     run.check(run.version() == NEW and len(run.backups()) == 1, "그때까지 복구 자료(직전 버전의 백업)가 남아 있음")
-    ask.click("예")
-    run.answer("업데이트", "확인", "이전 버전으로 되돌렸습니다", 120, "DJMAXLocalRecords")
+    ask.click("이전 버전으로 복구")
+    text = run.answer("업데이트", "확인", "이전 버전으로 복구했습니다", 120, "DJMAXLocalRecords")
+    run.check("이전 버전(v" + OLD + ")을 실행합니다" in text, "복구를 마치면 한 번 알리고 확인 뒤 이전 버전을 켬", text[:300])
     run.wait_main("지난 업데이트 실패", 120)
-    run.check(run.program() == before_program and run.user_data() == before_user and run.version() == OLD, "프로그램·개인 자료가 업데이트 전과 똑같음")
+    run.check(run.program() == before_program and run.same_user(before_user) and run.version() == OLD, "프로그램·개인 자료가 업데이트 전과 똑같음")
     run.no_leftovers()
 
 
 def scenario_badstart_manual(run: Run) -> None:
     """새 버전이 켜지지 않는데 그대로 둔다 → 프로그램이 켜지지 않는 상태에서 백업의 실행 파일로 되돌린다."""
     before_user, before_program = bad_start(run)
-    ask = run.dialog("업데이트", 60, "DJMAXLocalRecords", "정상으로 시작되지 않았습니다")
+    ask = run.dialog("업데이트", 60, "DJMAXLocalRecords", "정상적으로 시작되지 않았습니다")
     text = ask.texts()
-    run.check("program\\" + EXE in text and "https://github.com/Zionee148/DJMAXLocalRecords" in text, "그대로 둘 때 되돌리려면 실행할 파일과 GitHub 안내를 알려 줌", text[:500])
-    ask.click("아니요")
+    run.check("나중에 이전 버전으로 복구하는 방법" in text and "새 버전 파일을 그대로 두고 업데이트를 마칩니다" in text, "그대로 둘 때 나중에 복구하는 방법을 둠", text[:500])
+    # 접힌 '나중에 복구하는 방법'을 펴서 화면에 적힌 실행 파일의 경로를 읽는다. 그 경로로 복구를 이어 간다(사용자가 밟는 차례)
+    ask.expand("나중에 이전 버전으로 복구하는 방법")
+    run.wait(lambda: "program\\" + EXE in ask.texts(), 10, "펼친 안내에 백업의 실행 파일이 보임")
+    text = ask.texts()
+    shown = next((line.strip() for line in text.replace("\r", "").split("\n") if line.strip().endswith("program\\" + EXE)), "")
+    run.check(shown != "" and "https://github.com/Zionee148/DJMAXLocalRecords" in text and "이전 버전 복구를 승인해 주세요" in text, "펼친 안내에 실행할 백업 파일과 안내 주소가 있고 단추 이름을 단정하지 않음", text[:600])
+    ask.click("새 버전 유지")
     run.quiet(60)
     backups = run.backups()
     run.check(len(backups) == 1 and run.version() == NEW, "프로그램이 켜지지 않는 채로 백업이 남아 있음")
-    run.check(str(backups[0] / "program" / EXE) in text, "창이 알려 준 파일이 실제로 그 백업의 실행 파일임", text[:500])
-    # 사용자가 백업 폴더의 실행 파일을 직접 켠다
-    run.start(backups[0] / "program" / EXE)
-    text = run.answer("이전 버전 복구", "예", "이 버전으로 되돌릴까요?", 60, "program")
-    run.check("v" + OLD in text and "그대로 둡니다" in text, "백업의 실행 파일이 되돌릴지 묻고 기록은 그대로 둔다고 알림", text[:300])
-    run.wait_main("이전 버전으로 되돌림", 180)
-    run.check(run.program() == before_program and run.user_data() == before_user and run.version() == OLD, "프로그램·개인 자료가 업데이트 전과 똑같음")
+    run.check(Path(shown).resolve() == (backups[0] / "program" / EXE).resolve() and Path(shown).is_file(), "창이 알려 준 파일이 실제로 이번 백업의 실행 파일임", shown)
+    # 사용자가 창이 알려 준 파일을 직접 켠다
+    run.start(Path(shown))
+    old = run.old_backup_ui(OLD)
+    text = run.answer("이전 버전 복구", "예" if old else "복구", "이 버전으로 되돌릴까요?" if old else "이 백업으로 이전 버전을 복구할까요?", 60, "program")
+    run.check("v" + OLD in text and ("그대로 둡니다" if old else "그대로 사용합니다") in text, "백업의 실행 파일이 복구할지 묻고 기록을 어떻게 쓰는지 알림", text[:300])
+    run.wait_main("이전 버전으로 되돌림" if old else "이전 버전으로 복구함", 180)   # 복구한 9.0.0 이 적는다: 그 백업과 같은 소스의 글
+    run.check(run.program() == before_program and run.same_user(before_user) and run.version() == OLD, "프로그램·개인 자료가 업데이트 전과 똑같음")
     run.no_leftovers()
 
 
@@ -926,7 +1071,7 @@ def interrupt(run: Run, package: str) -> Path:
         shutil.move(run.app / name, program / name)
     (backup / "data").mkdir()
     for name in USER_FILES:
-        shutil.copy2(run.app / name, backup / "data" / name)
+        shutil.copy2(run.current(name), backup / "data" / name)
     made = f"{datetime.now():%Y-%m-%d %H:%M:%S}"
     (backup / "backup-info.json").write_text(json.dumps({"Product": PRODUCT, "Version": OLD, "ReplacedBy": NEW, "Made": made, "Program": False}), encoding="utf-8")
     staging = run.app / "update" / "staging"
@@ -954,14 +1099,15 @@ def scenario_interrupted_restore(run: Run) -> None:
     stray = run.app / "data" / "new-in-901.txt"
     run.check(stray.exists() and run.version() == "" and not (run.app / EXE).samefile(backup / "program" / EXE), "만든 상태: 새 버전에만 있는 파일이 들어와 있고 프로그램 폴더에 목록이 없음")
     run.start(backup / "program" / EXE)
-    text = run.answer("이전 버전 복구", "예", "이 버전으로 되돌릴까요?", 60, "program")
-    run.check("v" + OLD in text and "그대로 둡니다" in text, "백업의 실행 파일이 되돌릴지 물음", text[:300])
-    run.wait_main("이전 버전으로 되돌림", 180)
+    old = run.old_backup_ui(OLD)
+    text = run.answer("이전 버전 복구", "예" if old else "복구", "이 버전으로 되돌릴까요?" if old else "이 백업으로 이전 버전을 복구할까요?", 60, "program")
+    run.check("v" + OLD in text and ("그대로 둡니다" if old else "그대로 사용합니다") in text, "백업의 실행 파일이 복구할지 물음", text[:300])
+    run.wait_main("이전 버전으로 되돌림" if old else "이전 버전으로 복구함", 180)   # 복구한 9.0.0 이 적는다: 그 백업과 같은 소스의 글
     run.check(not stray.exists(), "새 버전에만 있던 파일이 되돌린 뒤에 남지 않음")
-    run.check(run.program() == before_program and run.user_data() == before_user and run.version() == OLD, "프로그램·개인 자료가 업데이트 전과 똑같음")
+    run.check(run.program() == before_program and run.same_user(before_user) and run.version() == OLD, "프로그램·개인 자료가 업데이트 전과 똑같음")
     run.no_leftovers()
     run.update(NEW)
-    run.check(stray.read_bytes() == b"only in 9.0.1\n" and run.version() == NEW and run.user_data() == before_user, "같은 업데이트를 다시 하면 끝까지 됨, 개인 자료 그대로")
+    run.check(stray.read_bytes() == b"only in 9.0.1\n" and run.version() == NEW and run.same_user(before_user), "같은 업데이트를 다시 하면 끝까지 됨, 개인 자료 그대로")
     run.no_leftovers()
 
 
@@ -979,15 +1125,128 @@ def scenario_interrupted_copyback(run: Run) -> None:
     stray = run.app / "data" / "new-in-901.txt"
     run.check(stray.exists() and run.version() == OLD, "손으로 되돌린 뒤: 옛 버전이고, 새 버전에만 있던 파일이 남아 있음")
     run.start()
-    text = run.answer("업데이트", "확인", "도중에 멈췄습니다", 60, "app")
-    run.check("기록과 설정은 건드리지 않았습니다" in text and str(backup / "program") in text, "켜면 지난 업데이트가 도중에 멈췄다고 백업 폴더와 함께 알림", text[:400])
+    old = run.old_ui()
+    text = run.answer("업데이트", "확인", "도중에 멈췄습니다" if old else "지난 업데이트가 중단되었습니다", 60, "app")
+    run.check("기록과 설정은 건드리지 않았습니다" in text and str(backup / "program") in text if old else "섞여 있을 수 있습니다" in text and "그대로입니다" in text and "백업으로 복구하는 방법" in text,
+              "켜면 지난 업데이트가 도중에 멈췄다고 알리고 백업으로 복구하는 방법을 둠", text[:400])
     run.wait_main("새 버전")
-    run.check(run.user_data() == before_user, "개인 자료 그대로")
+    run.check(run.same_user(before_user), "개인 자료 그대로")
     run.update(NEW)
-    run.check(stray.read_bytes() == b"only in 9.0.1\n" and run.version() == NEW and run.user_data() == before_user, "남아 있던 파일 때문에 멈추지 않고 업데이트가 끝까지 됨, 개인 자료 그대로")
+    run.check(stray.read_bytes() == b"only in 9.0.1\n" and run.version() == NEW and run.same_user(before_user), "남아 있던 파일 때문에 멈추지 않고 업데이트가 끝까지 됨, 개인 자료 그대로")
     run.no_leftovers()
     log = (run.app / "update" / "update.log").read_text(encoding="utf-8")
-    run.check("지난 교체가 남긴 새 버전의 파일 1개를 치워 둠" in log, "그 파일 하나만 치워 두었다고 기록에 남음")
+    # 치워 둘 것은 새 버전에만 있는 파일이다. 두 버전의 파일이 같으면 배포 파일에 더해 둔 하나뿐이고, 9.0.0 을 옛 버전의 소스로 만들었으면(--old-from) 그사이에 늘어난 파일도 든다
+    names = {version: {item["Path"] for item in json.loads((run.builds / version / PRODUCT / MANIFEST).read_text(encoding="utf-8"))["Files"]} for version in (OLD, NEW)}
+    strays = len((names[NEW] | {"data/new-in-901.txt"}) - names[OLD])
+    run.check(f"지난 교체가 남긴 새 버전의 파일 {strays}개를 치워 둠" in log, f"새 버전에만 있던 파일 {strays}개만 치워 두었다고 기록에 남음")
+
+
+def scenario_restore_old(run: Run) -> None:
+    """새 버전을 쓴 뒤 실행 파일 옆의 기록을 쓰는 옛 버전으로 복구 → 거기서 저장 → 다시 업데이트.
+
+    두 자리의 기록이 따로 남고, 다시 올라온 새 버전은 'UserData'의 기록을 쓰며, 옛 기록이 달라졌다는 안내가 한 번 뜬다.
+    9.0.0 을 옛 버전의 소스로 만든 빌드(build 의 --old-from)에서만 볼 수 있다.
+    """
+    if not run.old_layout:
+        raise Skip("9.0.0 을 옛 버전의 소스로 만든 빌드에서만 본다(build 의 --old-from)")
+    server = run.server
+    server.items = [server.release(NEW, run.packages / "good.zip")]
+    run.lay()
+    inner, beside = run.app / USER_DIR / "records.json", run.app / "records.json"
+
+    def add_profile(name: str, target: Path) -> None:
+        saved = sha256(target)
+        run.main().click("새로")
+        ask = run.dialog("새 프로필", 15, "app")
+        ask.set_text(name)
+        ask.click("확인")
+        run.wait(lambda: sha256(target) != saved, 15, f"'{name}' 을 만들어 기록 파일이 저장됨")
+
+    def names(path: Path) -> list[str]:
+        return [profile["Name"] for profile in json.loads(path.read_text(encoding="utf-8"))["Profiles"]]
+
+    run.start()
+    run.wait_main("새 버전 v" + NEW + " 있음")
+    run.update(NEW)
+    run.check(inner.is_file() and sha256(inner) == sha256(beside), "새 버전이 처음 켜지며 기록을 'UserData'로 옮김(내용이 같음)")
+    add_profile("새 버전에서 만든 프로필", inner)
+    run.check("새 버전에서 만든 프로필" in names(inner) and "새 버전에서 만든 프로필" not in names(beside), "새 버전의 저장은 'UserData'에만 들어감")
+    new_side, original = sha256(inner), sha256(beside)
+
+    run.wait(lambda: run.main() and run.main().button("이전 버전 복구"), 20, "[이전 버전 복구] 단추가 보임")
+    run.main().click("이전 버전 복구")
+    run.answer("이전 버전 복구", "복구", "v" + OLD, where="app")
+    run.wait(lambda: run.windows() and run.version() == OLD and run.main() is not None and "되돌림" in run.note(), 180, "9.0.0 의 주 화면이 뜨고 되돌림이 적힘", 0.15)   # 옛 소스의 9.0.0 이 적는 글
+    run.check(sha256(inner) == new_side and sha256(beside) == original, "복구는 두 자리의 기록을 모두 그대로 둠")
+    add_profile("옛 버전에서 만든 프로필", beside)
+    run.check("옛 버전에서 만든 프로필" in names(beside) and sha256(inner) == new_side, "옛 버전의 저장은 실행 파일 옆에만 들어감")
+    old_side = sha256(beside)
+
+    offer = run.offer("v" + NEW)
+    offer.click("업데이트")
+    text = run.answer("기록 안내", "확인", "이전 버전에서 변경한 기록이 있습니다", 240, "app")
+    run.check("‘UserData’ 폴더의 기록을 사용합니다" in text and run.version() == NEW, "다시 업데이트한 새 버전이 옛 기록이 달라졌다고 알림", text[:200])
+    run.wait(lambda: run.windows() and "업데이트 완료" in run.note(), 60, "9.0.1 의 주 화면에 업데이트 완료가 적힘", 0.15)
+    run.check(sha256(inner) == new_side and sha256(beside) == old_side, "두 기록이 따로 남음: 새 버전에서 만든 것과 옛 버전에서 만든 것")
+    run.check(names(inner)[-1] == "새 버전에서 만든 프로필" and names(beside)[-1] == "옛 버전에서 만든 프로필", "새 버전은 'UserData'의 기록을 씀(옛 기록을 가져오지 않음)", f"{names(inner)} / {names(beside)}")
+    run.no_leftovers()
+    run.close_app()
+    run.quiet()
+    run.start()
+    run.wait_main("v" + NEW)
+    time.sleep(4)
+    run.check(len(run.windows()) == 1, "다시 켜면 같은 안내가 다시 뜨지 않음", str([w.title for w in run.windows()]))
+    run.check(sha256(inner) == new_side and sha256(beside) == old_side, "기록은 그대로임")
+
+
+def scenario_format2_old(run: Run) -> None:
+    """형식 2 의 기록 파일(판을 한 줄씩 두는 새 형식)을 형식 1 만 아는 옛 버전이 만났을 때: 읽지 않고 알리며 파일을 건드리지 않는다.
+
+    9.0.0 을 옛 버전의 소스로 만든 빌드(build 의 --old-from)에서만 볼 수 있다.
+    """
+    if not run.old_layout:
+        raise Skip("9.0.0 을 옛 버전의 소스로 만든 빌드에서만 본다(build 의 --old-from)")
+    run.server.items = []
+    run.lay()
+    target = run.app / "records.json"
+    data = {"Format": 2, "ActiveId": "p1", "Profiles": [{"Id": "p1", "Name": "형식 2 로 저장한 프로필", "NextSeq": 3, "Plays": [
+        {"Seq": 1, "Key": "synthetic|4|SC|노말", "Score": 995421, "At": "2026-11-23T00:00:00Z", "Source": "play"},
+        {"Seq": 2, "Key": "synthetic|4|SC|노말", "Score": 995400, "Source": "varchive"}], "Recent": {}, "Undo": []}]}
+    target.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    before, backup = sha256(target), sha256(run.app / "records.json.bak")
+    run.start()
+    text = run.answer("실행 오류", "확인", "새 버전에서 저장된 형식", 60, "app")
+    run.check("형식 번호 2" in text and "건드리지 않았습니다" in text, "옛 버전이 형식 2 의 기록을 읽지 않고 알림", text[:300])
+    run.quiet()
+    run.check(sha256(target) == before and sha256(run.app / "records.json.bak") == backup and not (run.app / "records.json.tmp").exists(), "기록 파일과 그 백업은 바뀌지 않음")
+
+
+def scenario_restore_broken_info(run: Run) -> None:
+    """백업 정보 파일(backup-info.json)이 깨진 백업의 실행 파일을 직접 열어 복구한다 → 복구한 이전 버전의 주 화면에 '이전 버전으로 복구함'이 적힌다.
+
+    백업 정보를 읽지 못하면 백업의 실행 파일은 자기 버전을 쓰고, 복구 완료 상태에도 그 버전을 적는다(빈 버전을 적으면 그 표시를 건너뛴다).
+    백업의 실행 파일은 그 백업의 버전이 그린다: 9.0.0 을 옛 소스로 만든 빌드에서는 예전 코드라 볼 수 없다.
+    """
+    if run.old_layout:
+        raise Skip("9.0.0 을 지금 소스로 만든 빌드에서만 본다(옛 소스로 만든 9.0.0 의 백업 실행 파일은 예전 동작이다)")
+    server = run.server
+    server.items = [server.release(NEW, run.packages / "good.zip")]
+    run.lay()
+    run.start()
+    run.wait_main("새 버전 v" + NEW + " 있음")
+    run.update(NEW)
+    run.close_app()
+    run.quiet()
+    before_user, before_program = run.user_data(), run.program()
+    backups = run.backups()
+    run.check(len(backups) == 1 and (backups[0] / "program" / EXE).is_file(), "직전 버전(9.0.0)의 백업이 하나 있음", str([b.name for b in backups]))
+    (backups[0] / "backup-info.json").write_text("{broken", encoding="utf-8")
+    run.start(backups[0] / "program" / EXE)
+    text = run.answer("이전 버전 복구", "복구", "이 백업으로 이전 버전을 복구할까요?", 60, "program")
+    run.check("v" + OLD in text and "그대로 사용합니다" in text, "백업 정보가 깨져도 백업의 실행 파일이 자기 버전과 기록을 쓰는 자리를 알림", text[:300])
+    run.wait_main("이전 버전으로 복구함", 180)
+    run.check(run.version() == OLD and run.same_user(before_user), "복구한 이전 버전의 업데이트 줄에 '이전 버전으로 복구함'이 적히고 개인 자료는 그대로임", run.note())
+    run.check(run.program() != before_program, "프로그램 파일이 이전 버전으로 바뀜")
 
 
 SCENARIOS = {
@@ -1003,6 +1262,9 @@ SCENARIOS = {
     "badstart-manual": scenario_badstart_manual,
     "interrupted-restore": scenario_interrupted_restore,
     "interrupted-copyback": scenario_interrupted_copyback,
+    "restore-old": scenario_restore_old,
+    "format2-old": scenario_format2_old,
+    "restore-broken-info": scenario_restore_broken_info,
 }
 
 
@@ -1021,12 +1283,14 @@ def run(name: str, wanted: list[str], keep: bool) -> int:
         print(f"[{key}] {SCENARIOS[key].__doc__.strip()}")
         server = Releases(SERVER_PORT)
         current = Run(base, key, builds, server)
-        began, error = time.time(), None
+        began, error, skipped = time.time(), None, None
         try:
             SCENARIOS[key](current)
             if current.main() is not None:
                 current.close_app()
             current.quiet(60)
+        except Skip as skip:
+            skipped = str(skip)
         except Fail as failure:
             error = str(failure)
         except Exception:   # 도구의 잘못도 실패로 적는다
@@ -1042,7 +1306,7 @@ def run(name: str, wanted: list[str], keep: bool) -> int:
                 if not left and not any(pid_alive(pid) for pid in current.started):
                     break
                 for window in left:
-                    for label in ("확인", "아니요", "취소", "나중에"):
+                    for label in ("확인", "아니요", "닫기", "취소", "나중에", "새 버전 유지"):
                         button = window.button(label)
                         if button:
                             user32.PostMessageW(button, BM_CLICK, 0, 0)
@@ -1057,8 +1321,10 @@ def run(name: str, wanted: list[str], keep: bool) -> int:
             print(f"    ! 끝나지 않은 프로세스가 있다: {sorted(set(still))}")
         if error:
             print(f"    실패: {error}")
-        results.append({"scenario": key, "result": "통과" if passed else "실패", "checks": len(current.checks), "seconds": round(time.time() - began, 1),
-                        "reason": error or "", "left_running": sorted(set(still))})
+        if skipped:
+            print(f"    건너뜀: {skipped}")
+        results.append({"scenario": key, "result": "건너뜀" if skipped else "통과" if passed else "실패", "checks": len(current.checks), "seconds": round(time.time() - began, 1),
+                        "reason": skipped or error or "", "left_running": sorted(set(still))})
         if passed and not keep and not still:
             shutil.rmtree(current.app, ignore_errors=True)
     lines = ["scenario\tresult\tchecks\tseconds\treason"] + [f"{r['scenario']}\t{r['result']}\t{r['checks']}\t{r['seconds']}\t{r['reason'].splitlines()[-1] if r['reason'] else ''}" for r in results]
@@ -1068,8 +1334,10 @@ def run(name: str, wanted: list[str], keep: bool) -> int:
     print()
     for line in lines[1:]:
         print(line)
+    count = {word: sum(1 for r in results if r["result"] == word) for word in ("통과", "실패", "건너뜀")}
+    print(f"통과 {count['통과']}, 실패 {count['실패']}, 건너뜀 {count['건너뜀']}(이 빌드로는 볼 수 없는 것. 통과에 넣지 않는다)")
     print("결과:", base)
-    return 0 if all(r["result"] == "통과" for r in results) else 1
+    return 0 if count["실패"] == 0 else 1
 
 
 def manual(name: str) -> int:
@@ -1102,13 +1370,14 @@ def main() -> int:
     parser.add_argument("name", help="결과 이름(data\\updatetest\\<이름>)")
     parser.add_argument("scenarios", nargs="*", help="run 에서 돌릴 시나리오(주지 않으면 전부)")
     parser.add_argument("--worktree", action="store_true", help="build: 커밋하지 않은 작업 폴더의 소스로 만든다")
+    parser.add_argument("--old-from", help="build: 9.0.0 만 이 가지나 커밋의 소스로 만든다(예: release-1.1)")
     parser.add_argument("--keep", action="store_true", help="run: 통과한 시나리오의 app 폴더도 남긴다")
     args = parser.parse_args()
     for stream in (sys.stdout, sys.stderr):
         stream.reconfigure(errors="replace", line_buffering=True)
     try:
         if args.action == "build":
-            return build(args.name, args.worktree)
+            return build(args.name, args.worktree, args.old_from)
         if args.action == "run":
             return run(args.name, args.scenarios, args.keep)
         return manual(args.name)

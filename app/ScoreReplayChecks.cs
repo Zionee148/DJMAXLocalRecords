@@ -7,7 +7,7 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 namespace LadderRecords;
 
-// 시험용 주 화면에 녹화를 실제 시간으로 넣는다 (기획서 v3 완료 기준 1의 "마지막 앱 경로 시험").
+// 시험용 주 화면에 녹화를 실제 시간으로 넣는다.
 //
 // 주 화면(MainForm)을 그대로 띄우고 두 가지만 바꿔 끼운다: 게임 창 캡처 대신 녹화의 "지금 화면", Steam 곡 정보 대신 정해 둔 곡.
 // 타이머와 캡처 주기, 곡 인식 흐름(RATE·판정), SCORE 연결, 등록 요청, 확인·취소·저장은 앱의 코드가 그대로 돈다.
@@ -139,12 +139,23 @@ static partial class ScoreReplayChecks
     option.Checked=true;Check("주 화면: 진단 그림 저장을 켜면 설정에 남음",UserOptions.Load(preferences).DiagnosticImages);
     option.Checked=false;Check("주 화면: 끄면 설정에서도 꺼짐",!UserOptions.Load(preferences).DiagnosticImages);
     var status=Get<Label>(app,"scoreStatus");
-    Check("주 화면: 모듈을 읽었음(SCORE 위치 탐색 중)",status.Text.StartsWith("SCORE 위치 탐색 중"),status.Text);
+    Check("주 화면: 모듈을 읽었음(감지를 켜지 않았으니 SCORE 위치 탐색 대기)",status.Text.StartsWith("SCORE 위치 탐색 대기"),status.Text);
     Check("주 화면: 1920x1080 이면 해상도 안내 없음",!status.Text.Contains("1920×1080 게임 화면을 기준"));
     typeof(MainForm).GetField("captureSize",Flags)!.SetValue(app,((long)1280<<32)|720);Call(app,"UpdateScoreStatus");
     Check("주 화면: 1280x720 이면 해상도 안내가 보임",status.Text.Contains("게임 화면 1280×720")&&status.Text.Contains("게임 해상도를 1920×1080으로 권장합니다")&&!status.Text.Contains("창모드"),status.Text);
     typeof(MainForm).GetField("captureSize",Flags)!.SetValue(app,((long)1920<<32)|1080);Call(app,"UpdateScoreStatus");
     Check("주 화면: 다시 1920x1080 이면 안내가 사라짐",!status.Text.Contains("1920×1080 게임 화면을 기준"),status.Text);
+    // 감지 중 판독 오류는 SCORE 위치가 고정돼 있어도 먼저 보이고, 같은 오류는 진단 기록에 한 번만 남는다
+    var link=Peek(app,"scoreLink")!;var runner=Peek(app,"scoreRunner")!;var diag=(DjmaxScore.ScoreDiagnostics)Peek(app,"scoreLog")!;var session=(Session)Peek(app,"session")!;
+    session.Running=true;link.GetType().GetProperty("Location")!.SetValue(link,new DjmaxScore.LocationUpdate(0,DjmaxScore.LocationState.Locked,0,0,new DjmaxScore.ScoreArea(812,951,152,32,0),0,0));Call(app,"UpdateScoreStatus");
+    Check("주 화면: 감지 중 위치가 고정되면 SCORE 위치 고정",status.Text.StartsWith("SCORE 위치 고정"),status.Text);
+    int Logged()=>Directory.Exists(diag.Folder)?Directory.GetFiles(diag.Folder,"score-*.log").Sum(f=>File.ReadAllLines(f).Count(l=>l.Contains("runner-error"))):0;int logged=Logged();
+    runner.GetType().GetProperty("LastError")!.SetValue(runner,"판독 시험 오류");Call(app,"UpdateScoreStatus");Call(app,"UpdateScoreStatus");
+    Check("주 화면: 고정된 뒤의 판독 오류가 위치 고정보다 먼저 보임",status.Text.StartsWith("SCORE 판독 중 오류가 났습니다"),status.Text);
+    Check("주 화면: 같은 판독 오류는 진단 기록에 한 번만 남음",Logged()-logged==1,Logged()-logged);
+    runner.GetType().GetProperty("LastError")!.SetValue(runner,null);Call(app,"UpdateScoreStatus");
+    Check("주 화면: 오류가 걷히면 다시 SCORE 위치 고정",status.Text.StartsWith("SCORE 위치 고정"),status.Text);
+    session.Running=false;Call(app,"UpdateScoreStatus");
     app.Close();
    }
   }catch(Exception e){failures.Add("오류: "+(e.InnerException??e).Message);}
@@ -164,7 +175,7 @@ static partial class ScoreReplayChecks
   var result=new Dictionary<string,object?>{["case"]=id,["position"]=position,["expected"]=expected,["script"]=script,["pressAt"]=Math.Round(pressAt,3)};
   void Save(){result["notes"]=notes;File.WriteAllText(output,JsonSerializer.Serialize(result,new JsonSerializerOptions{WriteIndented=true,Encoder=System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping}));}
   try{
-   string preferences=Path.Combine(AppContext.BaseDirectory,"replay-check-options.json");new UserOptions(true).Save(preferences);   // 전체화면 사용: 확인 창을 띄우지 않는다
+   string preferences=Path.Combine(AppContext.BaseDirectory,"replay-check-options.json");new UserOptions(true).Save(preferences);   // 예전의 '전체화면 사용'을 켠 설정 파일. 이제 쓰지 않는 값이다(저장 확인은 주 화면 안에 뜬다)
    string log=Path.Combine(AppContext.BaseDirectory,"diagnostics");
    long logFrom=Directory.Exists(log)?new DirectoryInfo(log).EnumerateFiles("score-*.log").Sum(f=>f.Length):0;
    using var replay=new Replay(source,start,end-start);

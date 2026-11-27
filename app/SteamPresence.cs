@@ -8,6 +8,16 @@ record SteamSnapshot(bool Available,SteamChart? Chart,string Detail);
 class SteamPresence:IDisposable
 {
  IntPtr library,friends,user;bool initialized;DateTime retry;
+ // 게임이 켜져 있을 때만 Steam 에 접속한다. 이 접속은 디맥의 게임 번호로 하는 것이라, 접속해 있는 동안 Steam 은 디맥이 실행 중이라고 본다:
+ // 늘 접속해 두면 게임을 켜지 않았는데 이 프로그램만 켜도 실행 중으로 뜨고, 게임을 꺼도 이 프로그램이 켜져 있으면 실행 중으로 남는다. 그래서 게임이 꺼지면 접속을 끊는다.
+ // 게임 프로세스가 있는지는 1초에 한 번만 본다(Read 는 0.1초마다 불린다). 알아내지 못한 때에는: 접속해 있으면 그대로 두고(한 번의 실패로 끊지 않는다), 접속하지 않은 채면 접속을 시도하지 않고 다음에 다시 본다
+ public const string WaitingText="게임 실행 대기";
+ internal Func<bool> GameRunning=FindGame;
+ bool gameSeen;long gameCheckedAt=long.MinValue;
+ static bool FindGame(){var found=System.Diagnostics.Process.GetProcessesByName("DJMAX RESPECT V");try{return found.Length>0;}finally{foreach(var process in found)process.Dispose();}}
+ bool GameOn(){long now=Environment.TickCount64;if(gameCheckedAt==long.MinValue||now-gameCheckedAt>=1000){gameCheckedAt=now;try{gameSeen=GameRunning();}catch{gameSeen=initialized;}}return gameSeen;}
+ /// <summary>지금 Steam 에 접속해 있는가(검사가 본다)</summary>
+ internal bool Connected=>initialized;
  [UnmanagedFunctionPointer(CallingConvention.Cdecl)]delegate int InitCall(IntPtr error);
  [UnmanagedFunctionPointer(CallingConvention.Cdecl)]delegate IntPtr Accessor();
  [UnmanagedFunctionPointer(CallingConvention.Cdecl)]delegate ulong UserId(IntPtr self);
@@ -20,10 +30,11 @@ class SteamPresence:IDisposable
   string steam=Registry.GetValue(@"HKEY_CURRENT_USER\Software\Valve\Steam","SteamPath",null) as string??Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),"Steam");var roots=new List<string>{steam};string config=Path.Combine(steam,"steamapps","libraryfolders.vdf");if(File.Exists(config))foreach(Match m in Regex.Matches(File.ReadAllText(config),"\"path\"\\s*\"([^\"]+)\""))roots.Add(m.Groups[1].Value.Replace(@"\\",@"\"));foreach(string root in roots){string path=Path.Combine(root,"steamapps","common","DJMAX RESPECT V","DJMAX RESPECT V_Data","Plugins","x86_64","steam_api64.dll");if(File.Exists(path))return path;}throw new Exception("디맥 설치 폴더의 스팀 연동 파일을 찾지 못했습니다.");
  }
  public SteamSnapshot Read(){try{
-  if(!initialized){if(DateTime.UtcNow<retry)return new(false,null,"스팀 연결 재시도 대기 중");retry=DateTime.UtcNow.AddSeconds(5);if(library==IntPtr.Zero)library=NativeLibrary.Load(FindLibrary());Environment.SetEnvironmentVariable("SteamAppId","960170");Environment.SetEnvironmentVariable("SteamGameId","960170");var error=Marshal.AllocHGlobal(1024);try{Marshal.Copy(new byte[1024],0,error,1024);if(Export<InitCall>("SteamAPI_InitFlat")(error)!=0)throw new Exception("스팀 연결 실패: "+Marshal.PtrToStringUTF8(error));}finally{Marshal.FreeHGlobal(error);}initialized=true;friends=Interface("SteamAPI_SteamFriends_v","018","017");user=Interface("SteamAPI_SteamUser_v","023","022","021");var utils=Interface("SteamAPI_SteamUtils_v","010","009");if(Export<AppId>("SteamAPI_ISteamUtils_GetAppID")(utils)!=960170)throw new Exception("스팀 게임 번호가 일치하지 않습니다.");}
+  if(!GameOn()){if(initialized){try{Export<VoidCall>("SteamAPI_Shutdown")();}catch{}initialized=false;}retry=default;return new(true,null,WaitingText);}
+  if(!initialized){if(DateTime.UtcNow<retry)return new(false,null,"스팀 연결 실패 · 잠시 뒤 다시 연결합니다");retry=DateTime.UtcNow.AddSeconds(5);if(library==IntPtr.Zero)library=NativeLibrary.Load(FindLibrary());Environment.SetEnvironmentVariable("SteamAppId","960170");Environment.SetEnvironmentVariable("SteamGameId","960170");var error=Marshal.AllocHGlobal(1024);try{Marshal.Copy(new byte[1024],0,error,1024);if(Export<InitCall>("SteamAPI_InitFlat")(error)!=0)throw new Exception("스팀 연결 실패: "+Marshal.PtrToStringUTF8(error));}finally{Marshal.FreeHGlobal(error);}initialized=true;friends=Interface("SteamAPI_SteamFriends_v","018","017");user=Interface("SteamAPI_SteamUser_v","023","022","021");var utils=Interface("SteamAPI_SteamUtils_v","010","009");if(Export<AppId>("SteamAPI_ISteamUtils_GetAppID")(utils)!=960170)throw new Exception("스팀 게임 번호가 일치하지 않습니다.");}
   Export<VoidCall>("SteamAPI_RunCallbacks")();ulong id=Export<UserId>("SteamAPI_ISteamUser_GetSteamID")(user);var read=Export<RichValue>("SteamAPI_ISteamFriends_GetFriendRichPresence");string Value(string key)=>Marshal.PtrToStringUTF8(read(friends,id,key))??"";
-  string mode=Value("gamemode"),name=Value("songname"),button=Value("keymode"),pattern=NormalizePattern(Value("difficult"));if(string.IsNullOrWhiteSpace(name))return new(true,null,"스팀 플레이 대기 · "+mode);if(mode is not ("FREESTYLE" or "LADDERMATCH" or "OPENMATCH"))return new(true,null,"지원하지 않는 모드: "+mode);if(!Regex.IsMatch(button,@"^[4568]B$"))return new(false,null,"스팀 버튼 정보 확인 중");if(pattern is not ("NORMAL" or "HARD" or "MAXIMUM" or "SC"))return new(false,null,"스팀 난이도 정보 확인 중");return new(true,new(mode,name,int.Parse(button[..1]),pattern),$"스팀: {name} · {button} · {pattern}");
- }catch(Exception e){if(initialized){try{Export<VoidCall>("SteamAPI_Shutdown")();}catch{}initialized=false;}retry=DateTime.UtcNow.AddSeconds(5);return new(false,null,e.Message);}}
+  string mode=Value("gamemode"),name=Value("songname"),button=Value("keymode"),pattern=NormalizePattern(Value("difficult"));if(string.IsNullOrWhiteSpace(name))return new(true,null,string.IsNullOrWhiteSpace(mode)?"스팀 플레이 대기":"스팀 플레이 대기 · "+mode);if(mode is not ("FREESTYLE" or "LADDERMATCH" or "OPENMATCH"))return new(true,null,"지원하지 않는 모드: "+mode);if(!Regex.IsMatch(button,@"^[4568]B$"))return new(false,null,"스팀 버튼 정보 확인 중");if(pattern is not ("NORMAL" or "HARD" or "MAXIMUM" or "SC"))return new(false,null,"스팀 난이도 정보 확인 중");return new(true,new(mode,name,int.Parse(button[..1]),pattern),$"스팀: {name} · {button} · {pattern}");
+ }catch(Exception){if(initialized){try{Export<VoidCall>("SteamAPI_Shutdown")();}catch{}initialized=false;}retry=DateTime.UtcNow.AddSeconds(5);return new(false,null,"스팀 연결 실패 · 잠시 뒤 다시 연결합니다");}}   // 예외 원문(Steam 의 영어 글 등)은 상태 줄에 보이지 않는다
  internal static string NormalizePattern(string value)=>value.Trim().ToUpperInvariant() switch
  {
   "NM" or "NORMAL"=>"NORMAL",

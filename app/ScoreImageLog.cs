@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 namespace LadderRecords;
 
-// SCORE 진단 그림 (기획서 v3 기능 7절). 사용자가 켰을 때만 남긴다. 기본은 꺼져 있다.
+// SCORE 진단 그림. 사용자가 켰을 때만 남긴다. 기본은 꺼져 있다.
 //
 //   - 등록 키를 누른 순간의 게임 화면(screen.png)과, 그 뒤 점수를 읽는 데 쓴 화면의 점수 띠(frame-번호.png)를 요청마다 폴더 하나에 둔다.
 //     폴더 이름은 "날짜-시각-request-번호"다. 글자 진단 기록(score-번호.log)의 request 번호와 맞춰 볼 수 있다.

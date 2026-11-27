@@ -4,7 +4,7 @@ namespace LadderRecords;
 
 // 동명곡 식별용 음향 기준(data\audio\<SourceId>.bin)을 만들고 확인하는 도구(개발용 빌드에만 들어간다).
 // 특징 계산과 비교는 앱이 플레이 중에 쓰는 것(AudioIdentity)을 그대로 부른다. 그래서 기준과 플레이 중의 소리가 같은 계산을 거친다.
-// 영상에서 소리를 추출하고 작업 목록을 만들어 이 도구를 실행하는 것은 tools\build_audio_references.py 다. 기록: docs\기록\동명곡-소리기준.md
+// 영상에서 소리를 추출하고 작업 목록을 만들어 이 도구를 실행하는 것은 tools\build_audio_references.py 다.
 //
 //   DJMAXLocalRecords.exe --audio-reference-build <작업 목록.json>
 //     {"items":[{"id":"varchive:2","wav":"…\\2.wav","bin":"…\\2.bin"}],"report":"…\\build.json"}

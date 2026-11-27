@@ -3,7 +3,7 @@
 //   플레이 중: 고정 뒤의 화면을 낮은 빈도로 읽어 둔 값(PlayLog)으로 노트 수를 맞추고 검산 근거를 만든다. 값을 만들어 내는 데 쓰지 않는다.
 //   요청 뒤  : 요청 이후에 캡처한 화면만 최종 값의 근거로 쓴다. 점수로 볼 수 있는 같은 값이 서로 다른 캡처 Need 장 이상에서,
 //              StableFor 초 이어져 읽히면 답한다. 기한까지 못 채우면 값을 내지 않는다.
-//   사라지면 직전 값(2026-11-14 에 정한 규칙): StableFor 를 채우기 전에 점수가 사라지면, 그 값이 ShortFor 초 이상(캡처 NeedShort 장 이상) 이어졌고
+//   사라지면 직전 값: StableFor 를 채우기 전에 점수가 사라지면, 그 값이 ShortFor 초 이상(캡처 NeedShort 장 이상) 이어졌고
 //              그 뒤로 점수로 볼 수 있는 값이 다시 나오지 않은 채 GoneFor 초가 지났을 때 그 값을 낸다. 다른 점수로 바뀌면 앞의 값에는 이 예외 조건을 적용하지 않는다.
 //              (키를 누른 뒤 최종 점수가 화면에 남는 시간이 짧아서, 늦게 누르면 StableFor 를 채우기 전에 점수판이 사라진다)
 //
@@ -22,9 +22,9 @@ public sealed record JudgeOptions
     public int MinPlayValues { get; init; } = 8;           // 플레이 중 규칙을 통과한 서로 다른 값
     public double MinAgree { get; init; } = 0.6;           // 또렷이 읽힌 값 가운데 규칙을 통과한 비율
     public double MaxNotesPerSecond { get; init; } = 50;   // 마지막 플레이 값에서 그 사이 시간에 오를 수 있는 한도
-    public double ShortFor { get; init; } = 0.3;           // 사라지면 직전 값: 사라지기 직전에 같은 값이 이만큼(초)은 이어졌어야 한다(0.3초로 정함, 2026-11-14). 0 이면 이 규칙을 끈다
+    public double ShortFor { get; init; } = 0.3;           // 사라지면 직전 값: 사라지기 직전에 같은 값이 이만큼(초)은 이어졌어야 한다. 0 이면 이 규칙을 끈다
     public int NeedShort { get; init; } = 3;               // 그 사이의 서로 다른 캡처 수
-    public double GoneFor { get; init; } = 2.0;            // 점수로 볼 값이 이만큼(초) 내리 안 보이면 사라진 것으로 본다 (2초로 정함, 2026-11-14)
+    public double GoneFor { get; init; } = 2.0;            // 점수로 볼 값이 이만큼(초) 내리 안 보이면 사라진 것으로 본다
 }
 
 /// <summary>플레이 중 읽어 둔 값에서 얻은 검산 근거.</summary>

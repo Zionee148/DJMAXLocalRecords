@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using DjmaxScore;
 namespace LadderRecords;
-// 단축키가 지금의 SCORE 등록 흐름으로 이어지는지 본다(2026-11-16 에 다시 썼다. 전에는 옛 RATE 등록을 기대했다).
+// 단축키가 SCORE 등록 흐름으로 이어지는지 본다.
 //
 // 두 가지로 돌린다. 확인하는 것은 같고, 단축키를 누가 누르느냐가 다르다.
 //   --hotkey-flow-check   자동 검사. 단축키가 눌렸을 때 Windows 가 창에 보내는 메시지(WM_HOTKEY)를 검사가 직접 보낸다. 몇 초면 끝난다(30초가 지나면 시간 초과).
@@ -14,12 +14,12 @@ namespace LadderRecords;
 // 차례(사람): 감지 시작 → 등록(후보) → 저장 취소 → 등록(후보) → 저장 확인 → 새로 감지하기   (분석 중 취소는 사람이 맞춰 누르기 어려워 자동 검사만 본다)
 //
 // 등록 키가 여는 등록 요청은 앱이 실제로 만든 것이다(주 화면의 RequestRegistration 이 SCORE 모듈에 요청을 연다).
-// 실제 게임 화면이 없으면 모듈은 "점수 위치를 아직 찾지 못했습니다"로 곧 답한다. 그래서 후보가 필요한 단계에서는,
+// 실제 게임 화면이 없으면 모듈은 "SCORE 위치를 아직 찾지 못했습니다"로 곧 답한다. 그래서 후보가 필요한 단계에서는,
 // 앱이 등록 키를 처리한 바로 그 자리에서(모듈의 답이 화면 스레드로 넘어오기 전에) 그 요청에 대한 답("수락, 987,117점")을 검사가 만들어 넣는다.
 // 이 검사가 보지 않는 것: 화면에서 점수를 읽는 것(녹화로 하는 분기 시험과 실제 게임이 본다),
 // 자동 검사에서는 실제 키 입력(Windows 가 전역 단축키로 받아 주는 것, 게임이 앞에 있을 때)도 보지 않는다. 그것은 --hotkey-probe 나 실제 사용으로 본다.
 //
-// 자료: 필요 없다. 기록은 실행 파일 옆의 test-data 아래 임시 파일에 쓴다(실행 파일 옆의 records.json 은 건드리지 않는다).
+// 자료: 필요 없다. 기록은 실행 파일 옆의 test-data 아래 임시 파일에 쓴다(‘UserData’의 records.json 은 건드리지 않는다).
 // 결과: hotkey-flow-validation.json (passed, mode, steps, 실패하면 failed_step 과 error)
 [System.Runtime.Versioning.SupportedOSPlatform("windows10.0.19041")]
 static class HotkeyFlowChecks
@@ -46,7 +46,7 @@ static class HotkeyFlowChecks
  {
   string folder=Path.Combine(AppContext.BaseDirectory,"test-data",Guid.NewGuid().ToString("N"));Directory.CreateDirectory(folder);
   string resultPath=Path.Combine(AppContext.BaseDirectory,"hotkey-flow-validation.json");File.Delete(resultPath);
-  string beside=Path.Combine(AppContext.BaseDirectory,"records.json");DateTime? besideAt=File.Exists(beside)?File.GetLastWriteTimeUtc(beside):null;
+  string beside=UserFiles.At("records.json");DateTime? besideAt=File.Exists(beside)?File.GetLastWriteTimeUtc(beside):null;
   using var app=CheckPorts.Open(Port,()=>new Probe(catalog,Path.Combine(folder,"preferences.json")));
   T Field<T>(string name)=>(T)typeof(MainForm).GetField(name,Flags)!.GetValue(app)!;
   object? Peek(string name)=>typeof(MainForm).GetField(name,Flags)!.GetValue(app);
@@ -105,7 +105,7 @@ static class HotkeyFlowChecks
   {
    current=step;Lock();statusAtRegister=null;answerNext=true;Press(0);
    await Until(()=>session.Pending!=null,"후보가 확인을 기다림");
-   if(session.Pending is not {RawScore:Candidate,Accuracy:98.71m}||session.Pending.Chart.Key!=chart.Key||Peek("activeRegistration")!=null||status.Text!="기록 등록 확인 대기")
+   if(session.Pending is not {RawScore:Candidate,Accuracy:98.71m}||session.Pending.Chart.Key!=chart.Key||Peek("activeRegistration")!=null||status.Text!="저장 확인 대기")
     throw new StepFailed(current,$"후보가 다름: {session.Pending} (상태 글: {status.Text})");
   }
 
@@ -113,7 +113,7 @@ static class HotkeyFlowChecks
   {
    current="준비";
    if(Registered()!=5||Bound()!=app.Handle)throw new CheckUnavailableException($"시험용 전역 단축키(Ctrl+Alt+Shift+F1~F5) 다섯 개를 Windows 에 등록하지 못했다(등록된 것 {Registered()}개). 다른 프로그램이 그 키를 쓰고 있거나 이 검사가 이미 돌고 있다.");
-   if(Field<CheckBox>("fullscreen").Checked||!ReferenceEquals(Field<RecordStore>("store"),store))throw new StepFailed(current,"전제가 어긋남: 전체화면 사용이 꺼져 있고 주 화면이 임시 기록 파일을 써야 한다");
+   if(!ReferenceEquals(Field<RecordStore>("store"),store))throw new StepFailed(current,"전제가 어긋남: 주 화면이 임시 기록 파일을 써야 한다");
    HoldDetection();
 
    current="감지 시작";Press(4);
@@ -155,8 +155,8 @@ static class HotkeyFlowChecks
    Pass("창 핸들을 다시 만든 뒤에도 새로 감지하기 키가 들음(단축키 다섯 개가 새 창에 다시 등록됨)");
 
    current="마무리";
-   if((File.Exists(beside)?File.GetLastWriteTimeUtc(beside):(DateTime?)null)!=besideAt)throw new StepFailed(current,"실행 파일 옆의 records.json 을 건드림");
-   Pass("실행 파일 옆의 기록 파일은 건드리지 않음");
+   if((File.Exists(beside)?File.GetLastWriteTimeUtc(beside):(DateTime?)null)!=besideAt)throw new StepFailed(current,"‘UserData’의 records.json 을 건드림");
+   Pass("‘UserData’의 기록 파일은 건드리지 않음");
   }
 
   using var start=new System.Windows.Forms.Timer(){Interval=200};using var expiry=new System.Windows.Forms.Timer(){Interval=automatic?30000:600000};

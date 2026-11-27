@@ -1,6 +1,6 @@
 using System.Text.Json;
 namespace LadderRecords;
-// 기록 파일의 보호 두 가지를 검사한다(2026-11-16, 리뷰 docs\reviews\20261115-저장되돌리기-보호검증-리뷰.md 의 1·2번).
+// 기록 파일의 보호 두 가지를 검사한다.
 //  1. 프로그램 밖에서 바뀌었거나 사라진 기록 파일은 덮어쓰지 않는다
 //  2. 본 파일(records.json)이 없는데 백업(.bak)이나 저장 도중에 남은 임시 파일(.tmp)이 있으면 빈 기록으로 시작하지 않는다
 // 합성 기록만 쓰고, 실행 파일 옆의 test-data 아래에만 쓴다. 결과는 store-guard-validation.txt
@@ -30,7 +30,7 @@ static class StoreGuardTests
 
   // ── 평소의 저장은 그대로 된다
   {
-   string path=At("first-run");var s=new RecordStore(path);Check(s.Active.Records.Count==0&&!File.Exists(path),"처음 실행: 빈 기록으로 시작하고 파일을 만들지 않음");
+   string path=At("first-run");var s=new RecordStore(path);Check(s.Active.Plays.Count==0&&!File.Exists(path),"처음 실행: 빈 기록으로 시작하고 파일을 만들지 않음");
    s.Put(hard,90m,rawScore:900000);Check(File.Exists(path)&&!File.Exists(path+".bak")&&!File.Exists(path+".tmp"),"처음 저장: 본 파일만 생김");
    byte[] first=File.ReadAllBytes(path);s.Put(hard,91m,rawScore:910000);Check(Same(path+".bak",first)&&new RecordStore(path).Get(hard)!.Value==910000,"둘째 저장: 백업은 바로 앞의 본 파일");
   }
@@ -56,7 +56,7 @@ static class StoreGuardTests
    Blocked("밖에서 바뀜·등록",s,path,()=>s.Put(hard,98m,rawScore:980000),main,backup);
    Blocked("밖에서 바뀜·되돌리기",s,path,s.Undo,main,backup);
    Blocked("밖에서 바뀜·수동 기록",s,path,()=>s.SetManual(hard,98m,5,rawScore:980000),main,backup);
-   Blocked("밖에서 바뀜·기록 삭제",s,path,()=>s.DeleteRecord(hard),main,backup);
+   Blocked("밖에서 바뀜·기록 삭제",s,path,()=>s.Delete(s.History(hard.Key)[^1].Seq),main,backup);
    Blocked("밖에서 바뀜·가져오기",s,path,()=>s.Import(new Dictionary<Selection,decimal>{{other,99m}}),main,backup);
    Blocked("밖에서 바뀜·프로필 만들기",s,path,()=>s.Create("새 프로필",true),main,backup);
    Blocked("밖에서 바뀜·프로필 이름",s,path,()=>s.Rename("다른 이름"),main,backup);
@@ -89,6 +89,42 @@ static class StoreGuardTests
    Check(caught is IOException and not RecordFileChangedException&&State(s)==before&&s.Revision==revision&&Same(path,main),"다른 쪽이 쓰려고 연 동안: 저장 실패, 메모리·본 파일 그대로");
    s.Put(hard,98m,rawScore:980000);Check(s.Revision==revision+1&&new RecordStore(path).Get(hard)!.PlayCount==3,"다른 쪽이 닫은 뒤: 한 번만 저장됨");
   }
+  // 다른 프로그램(검색 색인·백신)이 본 파일을 읽으려고 열되 지우기를 함께 쓰지 않으면, 견주기는 되지만 바꿔 넣기가 막힌다
+  FileStream Reading(string path)=>new(path,FileMode.Open,FileAccess.Read,FileShare.ReadWrite);
+  Thread Meanwhile(Action act){var thread=new Thread(()=>act()){IsBackground=true};thread.Start();return thread;}   // 스레드 풀을 기다리지 않고 바로 돈다(시각이 어긋나지 않게)
+  {
+   // 잠깐 열려 있으면 조금 쉬었다가 다시 해서 저장한다
+   string path=At("briefly-open");var s=Seed(path);long revision=s.Revision;var open=Reading(path);
+   var closing=Meanwhile(()=>{Thread.Sleep(300);open.Dispose();});
+   var clock=System.Diagnostics.Stopwatch.StartNew();s.Put(hard,98m,rawScore:980000);clock.Stop();closing.Join();
+   Check(clock.ElapsedMilliseconds>=250,"다른 쪽이 읽으려고 잠깐 연 동안: 바꿔 넣기가 막혔다가");
+   Check(s.Revision==revision+1&&new RecordStore(path).Get(hard)!.Value==980000&&!File.Exists(path+".tmp"),"다른 쪽이 읽으려고 잠깐 연 동안: 다시 해서 저장함");
+  }
+  {
+   // 오래 열려 있으면 1초가 안 되게 다시 해 본 뒤 전처럼 보통의 파일 오류로 실패하고(밖에서 바뀐 것으로 여기지 않는다), 닫힌 뒤에는 한 번만 저장된다
+   string path=At("kept-open");var s=Seed(path);string before=State(s);long revision=s.Revision;byte[] main=File.ReadAllBytes(path);Exception? caught=null;
+   var clock=System.Diagnostics.Stopwatch.StartNew();
+   using(Reading(path)){try{s.Put(hard,98m,rawScore:980000);}catch(Exception e){caught=e;}}
+   clock.Stop();
+   Check(caught is UnauthorizedAccessException or IOException and not RecordFileChangedException&&State(s)==before&&s.Revision==revision&&Same(path,main),"다른 쪽이 읽으려고 오래 연 동안: 저장 실패, 메모리·본 파일 그대로");
+   Check(clock.ElapsedMilliseconds is >=800 and <3000,"다른 쪽이 읽으려고 오래 연 동안: 0.9초쯤 다시 해 보고 멈춤");
+   s.Put(hard,98m,rawScore:980000);Check(s.Revision==revision+1&&new RecordStore(path).Get(hard)!.PlayCount==3&&!File.Exists(path+".tmp"),"다른 쪽이 닫은 뒤: 한 번만 저장됨, 남은 임시 파일을 치움");
+  }
+  {
+   // 막혀서 쉬는 동안 밖에서 바뀌면 덮지 않는다: 다시 하기 직전에 다시 견주어 멈춘다. 백업은 처음 견줄 때 쓴 것(바뀌기 전의 본 파일)이다.
+   // 밖의 쓰기가 다시 견주려고 잡는 순간과 겹치면 견주기가 보통의 파일 오류로 실패한다(드물다). 어느 쪽이든 밖에서 바뀐 본 파일은 덮이지 않는다
+   string path=At("changed-while-waiting");var s=Seed(path);string before=State(s);long revision=s.Revision;byte[] main=File.ReadAllBytes(path);
+   byte[] foreign=File.ReadAllBytes(Path.Combine(root,"external-undo","records.json"));var open=Reading(path);
+   var writer=Meanwhile(()=>{
+    Thread.Sleep(150);
+    for(;;){try{using var writing=new FileStream(path,FileMode.Truncate,FileAccess.Write,FileShare.ReadWrite);writing.Write(foreign);break;}catch(IOException){Thread.Sleep(5);}}
+    Thread.Sleep(250);open.Dispose();
+   });
+   Exception? caught=null;try{s.Put(hard,98m,rawScore:980000);}catch(Exception e){caught=e;}
+   writer.Join();
+   Check(!main.SequenceEqual(foreign)&&caught is IOException&&State(s)==before&&s.Revision==revision&&Same(path,foreign),"쉬는 동안 밖에서 바뀜: 저장 멈춤, 메모리 그대로, 밖에서 바뀐 본 파일을 덮지 않음");
+   Check(Same(path+".bak",main),"쉬는 동안 밖에서 바뀜: 백업은 바뀌기 전의 본 파일");
+  }
 
   // ── 2번: 본 파일이 없는데 복구 자료가 남아 있으면 시작하지 않는다
   void Refused(string name,string path,string[] kept,string[] named)
@@ -101,7 +137,7 @@ static class StoreGuardTests
   }
   {
    string path=At("missing-main");Seed(path);File.Delete(path);
-   Refused("본 파일 없음·백업 있음",path,new[]{".bak"},new[]{"records.json.bak","사본의 이름을 records.json 으로"});
+   Refused("본 파일 없음·백업 있음",path,new[]{".bak"},new[]{"records.json.bak","사본의 이름을 records.json으로"});
    File.Copy(path+".bak",path);var s=new RecordStore(path);Check(s.Get(hard)!.Value==900000,"안내대로 백업의 사본을 본 파일로 두면 시작함(한 단계 앞의 기록)");
    s.Put(hard,95m,rawScore:950000);Check(new RecordStore(path).Get(hard)!.Value==950000,"되살린 뒤 저장함");
   }

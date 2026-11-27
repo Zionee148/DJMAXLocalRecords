@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 namespace LadderRecords;
 
 // 그림의 한 영역을 LockBits 로 한 번에 읽어 둔다. Bitmap.GetPixel·SetPixel 은 부를 때마다 그림을 잠갔다 푼다.
-// RATE 를 읽을 때마다(0.1초) GetPixel 을 1만 번 가까이 불러 코어 하나의 3% 쯤을 썼다(잰 값. docs\기록\최적화.md).
+// GetPixel 로 읽으면 RATE 를 읽을 때마다(0.1초) 1만 번 가까이 불러 코어 하나의 3% 쯤을 쓴다(잰 값).
 // 읽는 값은 GetPixel 과 같다(같은지는 실제 화면 그림으로 견줘 확인했다).
 sealed class PixelPatch
 {

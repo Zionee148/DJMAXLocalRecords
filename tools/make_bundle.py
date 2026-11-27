@@ -20,7 +20,9 @@
      저장소 맨 위의 LICENSE 와 licenses\\(함께 들어가는 외부 라이브러리의 라이선스·고지문 원문)를 같은 이름으로 넣는다.
      프로그램 파일 목록(update-manifest.json)을 쓴다. 자동 업데이트는 이 목록에 있는 파일만 바꾼다.
      개인 자료는 목록을 쓴 뒤에 넣으므로 목록에 들어가지 않는다.
-  3. 개인용: 개인 기록 폴더에서 기록과 설정을 읽어 넣는다. 그 폴더는 읽기만 한다.
+  3. 개인용: 개인 기록 폴더에서 기록과 설정을 읽어 앱 폴더의 'UserData'에 넣는다. 그 폴더는 읽기만 한다.
+     개인 기록 폴더에 'UserData'가 있으면 그 안의 것을 읽는다(v1.2.0 부터 앱이 개인 자료를 두는 자리다.
+     그 폴더가 생긴 뒤로 맨 위의 records.json 등은 옮기기 전의 옛 원본이다). 없으면 맨 위의 것을 읽는다.
      appearance.json 은 넣지 않고(새 기본 디자인을 쓴다) 앱 폴더 밖에 따로 남긴다.
      배포용: 개인 자료를 넣지 않는다. 앱이 빈 기록과 기본 설정으로 시작한다.
   4. <저장할 곳>\\<개인용|배포용>\\DJMAXLocalRecords 에 둔다. 이미 있으면 지우지 않고
@@ -37,9 +39,6 @@
 
 앱을 실행해 보지는 않는다(실행하면 앱이 묶음 안에 diagnostics 폴더를 만든다).
 확인하려면 묶음을 다른 곳에 복사해서 실행한다.
-
-규칙의 근거: docs\\plans\\20261111-상세기획서-공동작업인계.txt 16절·23절,
-docs\\결정사항.md 의 "앱 쪽 합의" 9번과 저장 위치 결정(2026-11-13).
 """
 from __future__ import annotations
 
@@ -83,12 +82,14 @@ def local_path(key: str, env: str) -> Path | None:
 DEFAULT_OUT = local_path("bundle_out", "DJMAX_BUNDLE_OUT") or ROOT / "dist"
 DEFAULT_PERSONAL = local_path("personal_records", "DJMAX_PERSONAL_RECORDS")
 
-# 개인용에 옮겨 넣는 것(기획서 23-2). records.json 은 반드시 있어야 한다
+# 개인용에 옮겨 넣는 것. records.json 은 반드시 있어야 한다
 CARRY = ["records.json", "records.json.bak", "hotkeys.json", "preferences.json", "records-view.json"]
-# 옮겨 넣지 않고 앱 폴더 밖에 남기는 것. 개인용에도 새 기본 디자인을 쓰기로 했다(기획서 16절·23-4)
+# 옮겨 넣지 않고 앱 폴더 밖에 남기는 것. 개인용도 새 기본 디자인을 쓴다
 DESIGN = "appearance.json"
 # 앱이 실행 중에 실행 파일 옆에 만드는 것. 빌드 결과에 있으면 안 되고 배포용에는 끝까지 없어야 한다
-USER_NAMES = {*CARRY, DESIGN, "records.json.tmp", "diagnostics", "update", "update-test.json"}
+# v1.2.0 부터 앱이 개인 자료를 두는 폴더(app\UserFiles.cs 의 FolderName 과 같아야 한다). 그 전에는 실행 파일 옆에 두었다
+USER_FOLDER = "UserData"
+USER_NAMES = {*CARRY, DESIGN, "records.json.tmp", "diagnostics", "update", "update-test.json", USER_FOLDER}
 # 프로그램 파일 목록. 자동 업데이트가 읽는다(app\UpdatePackage.cs 의 UpdateManifest 와 형식이 같아야 한다)
 MANIFEST = "update-manifest.json"
 TARGET = "win-x64"
@@ -197,8 +198,15 @@ def count_profiles(records: Path) -> int:
     return len(profiles)
 
 
+def personal_source(personal: Path) -> Path:
+    """개인 기록 폴더에서 지금 쓰이는 개인 자료가 있는 폴더: 'UserData'가 있으면 그것, 없으면 맨 위."""
+    inner = personal / USER_FOLDER
+    return inner if inner.is_dir() else personal
+
+
 def check_personal(personal: Path) -> None:
     """빌드에 시간을 쓰기 전에 개인 기록 폴더부터 본다."""
+    personal = personal_source(personal)
     if not (personal / "records.json").is_file():
         raise Stop(f"개인 기록을 찾지 못했다: {personal / 'records.json'}\n"
                    "다른 사본을 대신 쓰지 않는다. 폴더가 바뀌었으면 --personal 로 알려 준다.")
@@ -336,8 +344,11 @@ def make_zip(app: Path, target: Path) -> str:
 def carry_personal(personal: Path, app: Path, staged: Path) -> list[str]:
     """개인 기록 폴더에서 기록과 설정을 읽어 넣는다. 묶음정보에 적을 줄을 돌려준다."""
     built = {p.relative_to(app).as_posix().lower() for p in files_under(app)}
-    notes = [f"개인 자료를 읽은 곳: {personal}", "옮겨 넣은 개인 자료:"]
+    folder, personal = personal, personal_source(personal)   # folder: 개인 기록 폴더(프로그램 폴더), personal: 그 안에서 개인 자료가 있는 곳
+    notes = [f"개인 자료를 읽은 곳: {personal}", f"옮겨 넣은 개인 자료({USER_FOLDER} 폴더에):"]
     carried = set()
+    target = app / USER_FOLDER
+    target.mkdir()
     for name in CARRY:
         origin = personal / name
         if not origin.is_file():
@@ -345,16 +356,16 @@ def carry_personal(personal: Path, app: Path, staged: Path) -> list[str]:
             print(f"  개인 폴더에 없음: {name}")
             continue
         before = sha256(origin)
-        shutil.copy2(origin, app / name)
+        shutil.copy2(origin, target / name)
         # 앱이 저장하는 순간과 겹쳤는지 본다: 복사 앞뒤의 원본과 사본이 모두 같아야 한다
-        if not (sha256(app / name) == before == sha256(origin)):
+        if not (sha256(target / name) == before == sha256(origin)):
             raise Stop(f"복사하는 사이에 {name} 이 바뀌었다. 개인용 앱을 끄고 다시 한다.")
-        carried.add(name.lower())
+        carried.add(origin.relative_to(folder).as_posix().lower())
         notes.append(f"  {name}  {origin.stat().st_size:,}바이트  고친 날 {modified(origin)}  sha256 {before}")
 
     # 빌드하는 사이에 기록이 바뀌었을 수 있으니 옮겨 넣은 사본으로 한 번 더 본다
-    profiles = count_profiles(app / "records.json")
-    print(f"  기록: records.json {(app / 'records.json').stat().st_size:,}바이트, "
+    profiles = count_profiles(target / "records.json")
+    print(f"  기록: records.json {(target / 'records.json').stat().st_size:,}바이트, "
           f"고친 날 {modified(personal / 'records.json')}, 프로필 {profiles}개")
 
     if (personal / DESIGN).is_file():
@@ -364,9 +375,10 @@ def carry_personal(personal: Path, app: Path, staged: Path) -> list[str]:
 
     # 개인 폴더에 있는데 묶음으로 오지 않은 것을 숨기지 않는다(옛 버전의 파일, 진단 기록 등)
     left: dict[str, int] = {}
-    for path in files_under(personal):
-        relative = path.relative_to(personal).as_posix()
-        if relative.lower() in built or relative.lower() in carried or relative.lower() == DESIGN.lower():
+    design = (personal / DESIGN).relative_to(folder).as_posix().lower()
+    for path in files_under(folder):
+        relative = path.relative_to(folder).as_posix()
+        if relative.lower() in built or relative.lower() in carried or relative.lower() == design:
             continue
         top = relative.split("/")[0] + ("/" if "/" in relative else "")
         left[top] = left.get(top, 0) + 1
@@ -458,8 +470,8 @@ def main() -> int:
         # 모두 다 만들어진 뒤에만 저장할 곳을 건드린다
         for kind in kinds:
             dest = args.out / kind
-            old = dest / PRODUCT / "records.json"
-            if kind == "개인용" and old.is_file() and old.stat().st_mtime > (args.personal / "records.json").stat().st_mtime:
+            old = personal_source(dest / PRODUCT) / "records.json"
+            if kind == "개인용" and old.is_file() and old.stat().st_mtime > (personal_source(args.personal) / "records.json").stat().st_mtime:
                 print("  ! 앞서 만든 개인용 묶음의 기록이 개인 기록 폴더의 것보다 새것이다. "
                       "묶음 폴더에서 앱을 쓴 적이 있다면 그 기록은 아래 backup 폴더에만 남는다.")
             place(work / "out" / kind, dest, f"{made:%Y%m%d-%H%M%S}")

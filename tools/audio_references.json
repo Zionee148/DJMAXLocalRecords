@@ -1,5 +1,5 @@
 {
- "about": "동명곡 식별용 음향 기준(app/runtime/data/audio/<SourceId>.bin)을 만드는 원본 녹화와 사용 구간. tools/build_audio_references.py 가 읽는다. 기록: docs/기록/동명곡-소리기준.md",
+ "about": "동명곡 식별용 음향 기준(app/runtime/data/audio/<SourceId>.bin)을 만드는 원본 녹화와 사용 구간. tools/build_audio_references.py 가 읽는다.",
  "track": 0,
  "track_note": "track 은 0부터 세는 오디오 트랙 번호다. 녹화마다 오디오 트랙이 여섯 개 있다. 첫째(스트림 1)와 둘째는 같은 소리이고 셋째~여섯째는 무음이다. 첫째를 쓴다.",
  "lead_seconds": 5.0,

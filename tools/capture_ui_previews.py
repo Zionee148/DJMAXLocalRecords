@@ -28,7 +28,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / "app" / "bin" / "Debug" / "net9.0-windows"
 OUT = ROOT / "data" / "scaletest"
 EXE = "DJMAXLocalRecords.exe"
-SKIP = {"records.json", "records.json.bak", "records.json.tmp", "hotkeys.json", "preferences.json", "records-view.json", "appearance.json",
+SKIP = {"records.json", "records.json.bak", "records.json.tmp", "hotkeys.json", "preferences.json", "records-view.json", "appearance.json", "UserData",
         "test-error.txt", "test-data", "diagnostics", "diagnostics-check", "dev-fixtures", "probe-preferences.json"}
 SKIP_ENDS = ("-validation.json", "-validation.txt", ".png")
 CHECKS = [["--ui-check"], ["--dialogs-check"]]

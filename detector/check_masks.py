@@ -1,7 +1,7 @@
-"""제외 목록(연출 구간 + 가려진 프레임)을 따로 검산한다 (독립 검산, 2026-11-14).
+"""제외 목록(연출 구간 + 가려진 프레임)을 따로 검산한다 (독립 검산).
 
 "못 읽은 정상 프레임 N장"은 제외 목록에 든 프레임을 분모에서 빼고 센 숫자다. 목록이 실제보다 넓게 잡혀 있으면 판독에 실패한 프레임이 제외된 쪽에 들어가 집계에서 빠진다.
-그 목록은 fever.py 가 그림의 달라짐으로 만든 것이고, RIGHT 의 것(v17)은 그림으로 확인한 적이 없었다.
+그 목록은 fever.py 가 그림의 달라짐으로 만든 것이라, 제외가 맞는지는 그림으로 따로 확인해야 한다.
 
   stats   모듈이 읽은 결과와 목록을 포갠다. 제외된 프레임 가운데 모듈이 못 읽은 것이 어느 구간에 얼마나 있는지 센다.
           모듈이 다 읽은 구간은 제외가 틀렸어도 숨는 것이 없다(정상 프레임으로 되돌려도 읽은 프레임만 는다).
@@ -353,7 +353,7 @@ def frames(run: str, out: Path, case_id: str, numbers: list[int]):
         tiles.append(np.zeros_like(tiles[0]))
     out.parent.mkdir(parents=True, exist_ok=True)
     sheet = np.vstack([np.hstack(tiles[r:r + 2]) for r in range(0, len(tiles), 2)])
-    # 문서 폴더(git)에 둘 그림은 .jpg 로 받는다(같은 그림이 .png 의 1/7 쯤이다)
+    # git 에 넣을 그림은 .jpg 로 받는다(같은 그림이 .png 의 1/7 쯤이다)
     encoded = cv2.imencode(".jpg", sheet, [cv2.IMWRITE_JPEG_QUALITY, 90])[1] if out.suffix.lower() == ".jpg" else cv2.imencode(".png", sheet)[1]
     encoded.tofile(str(out))
     print(f"{out}: {len(numbers)}장")

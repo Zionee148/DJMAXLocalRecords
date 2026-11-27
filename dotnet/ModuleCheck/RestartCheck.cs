@@ -35,7 +35,7 @@ public static class RestartCheck
         IEnumerable<(double, int)> Rising(double from, int count, int notes, int start = 0, int perStep = 300) =>
             Enumerable.Range(1, count).Select(k => (from + 0.2 * k, Score(start + perStep * k, notes)));
 
-        Console.WriteLine("--- 가. 2026-11-14 마지막 앱 경로 시험의 4-14 RIGHT(EXTENSION 2. 노트 798, 고정 때 399). 진단 기록에 남은 값 그대로");
+        Console.WriteLine("--- 가. 녹화를 실제 시간으로 앱에 넣은 시험의 4-14 RIGHT(EXTENSION 2. 노트 798, 고정 때 399). 진단 기록에 남은 값 그대로");
         // 추적기의 지난 값이 높은 오독 865802(63.2초쯤, 진짜는 665802)로 어긋나 있었고, 66.7초부터 맨 앞자리 7 이 4 로 읽혔다.
         int[] four = { 419561, 424448, 426954, 430714, 435726, 439486 };
         Check("지난 값이 높은 오독으로 어긋난 뒤 앞자리가 4 로 읽힘, 앞 판의 근거 있음(마지막 값 719561)", false, 399, 865802, 63.2, Known(798, 719561, 66.48), Every(66.70, 0.22, four));

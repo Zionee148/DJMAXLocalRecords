@@ -21,8 +21,7 @@ locate_run·locate_full 은 영역 넓히기와 최종 판단에 0.5초 간격�
                                                                                     (영역 내역만 다시 구해 <사례>.steps.json 으로. 모든 프레임을 읽지는 않는다)
 출력: data\\full\\vid-<탐지>-<판독>\\<사례>.npz 와 <사례>.json(그 사례의 결과 한 줄)
 
-RIGHT: 탐지 모델도 판독기도 RIGHT 녹화로 학습하지 않았다. 한 번 돌려 숫자만 보고,
-실패한 사례를 들여다보며 고치는 것은 LEFT·CENTER 를 마무리한 뒤에 한다.
+RIGHT: 탐지 모델도 판독기도 RIGHT 녹화로 학습하지 않았다. RIGHT 는 돌려서 숫자만 보는 평가용이다.
 """
 import csv
 import json
@@ -187,7 +186,7 @@ def normal_check(out, masks_run: str, area_run: str, right: bool = False):
     같은 프레임을 기준 영역으로 읽은 실행(area_run)이 못 읽은 수도 나란히 낸다. 출력과 CSV 열 이름의 "Codex 영역"이 그 실행의 값이다.
 
     세는 사례: 정상 프레임 목록이 있는 사례 전부. 기준 영역으로 읽은 판독이 없는 사례(3-05 CENTER: 기준 영역이 없던 사례)는
-    찾은 자리의 수만 세고 견줌 칸을 비운다. 전에는 그런 사례를 통째로 건너뛰어 LEFT·CENTER 가 179개로만 세어졌다.
+    찾은 자리의 수만 세고 견줌 칸을 비운다(건너뛰면 LEFT·CENTER 가 179개로만 세어진다).
     목록이 없어 세지 못한 사례와 견줌이 없는 사례는 이름을 찍는다.
     """
     from .fever import normal_frames

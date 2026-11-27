@@ -1,4 +1,4 @@
-// 앱이 실제로 쓰는 연결 코드(ScoreLink)를 가짜 시계로 돌린다 (기획서 v3 완료 기준 1의 "개발 중 빠른 시험").
+// 앱이 실제로 쓰는 연결 코드(ScoreLink)를 가짜 시계로 돌린다.
 //
 // 앱이 하는 것처럼 한다: 일정한 간격(기본 0.1초)으로 "캡처"해서 ScoreLink.Offer 로 넘기고, 키 시각에 BeginRequest, 매 캡처마다 Poll.
 // 녹화의 60장 가운데 캡처 시각에 해당하는 한 장만 넘긴다(나머지는 앱이 보지 못한 화면이다).
@@ -171,7 +171,7 @@ public static class LinkRun
                 ScoreFrame f = feeder.Frame(band, 0, 0);
                 long now = runner.Now;
                 // 화소는 화면마다 사본을 넘긴다. 일이 대기열에 있는 동안 feeder 가 같은 버퍼에 다음 화면을 쓰기 때문이다
-                // (앱도 넘긴 화면을 일이 끝날 때까지 바꾸지 않는다. 일을 맡은 자리에서 바로 돌리던 때에는 사본이 필요 없었다).
+                // (앱도 넘긴 화면을 일이 끝날 때까지 바꾸지 않는다).
                 link.Offer(new CapturedFrame(now, now, f.Width, f.Height, f.Stride, f.SourceWidth, f.SourceHeight, f.CropX, f.CropY), (byte[])feeder.Buffer.Clone(), c.Id);
                 link.Poll();
                 lockedAt ??= link.Location?.LockedAt;

@@ -64,9 +64,9 @@ static class UpdateTests
      if(!progress.Cancelled)throw new Exception("Update: closing the progress window did not cancel");
     }
     using var gate=new ManualResetEventSlim();
-    using(var install=new InstallWindow("업데이트","v1.1.0  →  v1.2.0",UpdatePrepare.Stages,UpdatePrepare.Replace))
+    using(var install=new InstallWindow("업데이트",UpdateGuides.InstallHead,"v1.1.0","v1.2.0",UpdatePrepare.Stages,UpdatePrepare.Replace,UpdateGuides.InstallWait))
     {
-     install.Work=w=>{w.Stage(UpdatePrepare.Replace,"프로그램 파일을 바꾸는 중");gate.Wait();};
+     install.Work=w=>{w.Stage(UpdatePrepare.Replace,UpdateGuides.Swapping);gate.Wait();};
      install.Show();for(int i=0;i<50;i++){Application.DoEvents();Thread.Sleep(10);}
      Save(install,"update-install-preview"+end);
      install.Close();Application.DoEvents();
@@ -277,7 +277,7 @@ static class UpdateTests
   Check(current.Count==oldFiles.Length+1&&!current.Contains("new-only.dll"),"user's file named like a new program file is not taken for a program file");
   Check(UpdateSwap.Conflicts(app,current,bring).SequenceEqual(new[]{"new-only.dll"}),"it is found before swapping");
   string refusal=Fails(()=>UpdateSwap.CheckPlace(app,bring));
-  Check(refusal.Contains(Path.Combine(app,"new-only.dll"))&&refusal.Contains("덮어쓰지 않고")&&Same(Picture(app),untouched),"the update refuses to start and names the file");
+  Check(refusal.Contains(Path.Combine(app,"new-only.dll"))&&refusal.Contains("이 프로그램의 것이 아닌")&&Same(Picture(app),untouched),"the update refuses to start and names the file");
   var users=UpdateSwap.Exchange(app,current,park,staged,bring,false,expected,log.Add);
   Check(users is {Done:false,Restored:true}&&Same(Picture(app),untouched)&&File.ReadAllText(Path.Combine(app,"new-only.dll"))=="USER DATA"&&!UpdateFiles.Under(park).Any(),"even if swapped anyway: not overwritten, not moved into the backup, rolled back");
   // 새 버전의 폴더가 될 자리에 사용자의 파일이 있어도 알아챈다
@@ -384,7 +384,7 @@ static class UpdateTests
   string blocked=Path.Combine(root,"blocked");Lay(blocked,Mine,null);File.WriteAllText(Path.Combine(blocked,"update"),"a file where the folder should be");
   bool refused=false;try{UpdateBackup.Create(new(blocked),new Version(1,1,0),new Version(1,2,0));}catch(IOException){refused=true;}catch(UnauthorizedAccessException){refused=true;}
   Check(refused,"backup that cannot be written stops the update");
-  Check(Fails(()=>UpdatePrepare.CheckFolder(new(blocked),1000)).Contains("쓸 수 없어"),"folder that cannot be written is reported before downloading");
+  Check(Fails(()=>UpdatePrepare.CheckFolder(new(blocked),1000)).Contains("파일을 만들지 못했습니다"),"folder that cannot be written is reported before downloading");
   Check(Fails(()=>UpdatePrepare.CheckFolder(paths,long.MaxValue/16)).Contains("빈 공간"),"not enough disk space is reported before downloading");
  }
 
@@ -413,14 +413,18 @@ static class UpdateTests
   (note,notice)=UpdateStartup.Resolve(paths);
   Check(note!=null&&notice==null&&!File.Exists(paths.StateFile)&&!Directory.Exists(Path.Combine(paths.Backups,now))&&Directory.Exists(Path.Combine(paths.Backups,old)),"attempt that never reached the swap is cleaned up, earlier backup kept");
   // 교체 도중에 멈춘 흔적: 아무것도 지우지 않고 알린다
+  paths=Fresh();now=UpdateBackup.Create(paths,AppVersion.Current,new Version(99,0,0));File.WriteAllText(Path.Combine(UpdateBackup.Program(Path.Combine(paths.Backups,now)),UpdateManifest.Executable),"exe");paths.WriteState(new("swapping",me,"99.0.0",now,UpdatePaths.Now));   // 옛 파일이 백업으로 옮겨진 뒤에 멈춘 것(빈 백업은 아래)
+  (note,notice)=UpdateStartup.Resolve(paths);
+  Check(notice!=null&&notice.Plain().Contains(Path.Combine(paths.Backups,now,"program"))&&notice.Plain().Contains(paths.App.TrimEnd(Path.DirectorySeparatorChar))&&notice.Headline=="지난 업데이트가 중단되었습니다"&&File.Exists(paths.StateFile)&&Directory.Exists(Path.Combine(paths.Backups,now)),"interrupted swap is reported with the backup folder and nothing is removed");
+  // 옛 파일을 옮기기 전에 멈춘 교체(백업의 program 폴더가 비어 있다): 복사하라고 하지 않고 직접 설치하는 방법을 알린다
   paths=Fresh();now=UpdateBackup.Create(paths,AppVersion.Current,new Version(99,0,0));paths.WriteState(new("swapping",me,"99.0.0",now,UpdatePaths.Now));
   (note,notice)=UpdateStartup.Resolve(paths);
-  Check(notice!=null&&notice.Contains(now)&&File.Exists(paths.StateFile)&&Directory.Exists(Path.Combine(paths.Backups,now)),"interrupted swap is reported with the backup folder and nothing is removed");
+  Check(notice!=null&&notice.Plain().Contains("백업 폴더에 복구할 프로그램 파일이 없습니다.")&&!notice.Plain().Contains("복사할 백업 폴더")&&File.Exists(paths.StateFile),"an interrupted swap that moved nothing yet does not offer an empty backup for copying");
   paths=Fresh();paths.WriteState(new("rolled-back",me,"99.0.0","x",UpdatePaths.Now,"why"));
   Check(UpdateStartup.Resolve(paths) is (not null,null)&&!File.Exists(paths.StateFile),"rolled back update is noted once");
   paths=Fresh();Directory.CreateDirectory(Path.Combine(paths.Root,"replaced-1"));paths.WriteState(new("restored","99.0.0",me,"x",UpdatePaths.Now));
   (note,notice)=UpdateStartup.Resolve(paths);for(int i=0;i<40&&Directory.Exists(Path.Combine(paths.Root,"replaced-1"));i++)Thread.Sleep(250);
-  Check(note!=null&&note.Contains("되돌림")&&!Directory.Exists(Path.Combine(paths.Root,"replaced-1")),"restore is noted and the parked newer program removed");
+  Check(note!=null&&note.Contains("복구함")&&!Directory.Exists(Path.Combine(paths.Root,"replaced-1")),"restore is noted and the parked newer program removed");
   paths=Fresh();Directory.CreateDirectory(paths.Root);File.WriteAllText(paths.StateFile,"{broken");
   Check(UpdateStartup.Resolve(paths) is (null,null)&&File.Exists(paths.StateFile),"unreadable state file is left alone");
   // 지난 시도의 임시 파일을 다른 프로그램이 잡고 있어 임시 폴더 정리(CleanLater)가 끝나지 않는 사이에 새 업데이트가 시작되는 경우.
@@ -447,18 +451,18 @@ static class UpdateTests
   Directory.CreateDirectory(root);string path=Path.Combine(root,"records.json");
   var store=new RecordStore(path);store.Create("둘째",false);store.Create("예비",false);
   string saved=File.ReadAllText(path);
-  Check(JsonDocument.Parse(saved).RootElement.GetProperty("Format").GetInt32()==SavedData.KnownFormat,"format number written");
+  Check(JsonDocument.Parse(saved).RootElement.GetProperty("Format").GetInt32()==PlayData.KnownFormat&&saved.StartsWith("{\"Format\":2,"),"format number written");
   string before=UpdateFiles.Sha256(path),backupBefore=UpdateFiles.Sha256(path+".bak");int profiles=store.Data.Profiles.Count;
   store.Frozen=true;bool frozen=false;
   try{store.Create("셋째",false);}catch(RecordStoreFrozenException){frozen=true;}
   Check(frozen&&store.Data.Profiles.Count==profiles&&UpdateFiles.Sha256(path)==before&&UpdateFiles.Sha256(path+".bak")==backupBefore&&!File.Exists(path+".tmp"),"frozen store refuses to save, changes nothing on disk, rolls memory back");
   store.Frozen=false;store.Create("셋째",false);
   Check(store.Data.Profiles.Count==profiles+1&&new RecordStore(path).Data.Profiles.Count==profiles+1,"saving works again after the freeze is lifted");
-  // 번호가 없는 옛 파일은 1로 읽는다
-  string old=Path.Combine(root,"old.json");File.WriteAllText(old,saved.Replace("\"Format\": 1,",""));
-  Check(!File.ReadAllText(old).Contains("Format")&&new RecordStore(old).Data is {Format:1,Profiles.Count:3},"file without a format number reads as format 1");
+  // 번호가 없는 옛 파일(형식 1 의 모양)은 1로 읽어 메모리에서 올린다. 파일은 저장하기 전까지 그대로다
+  string old=Path.Combine(root,"old.json"),oldText="{\"ActiveId\":\"p\",\"Profiles\":[{\"Id\":\"p\",\"Name\":\"기본\",\"Records\":{},\"Undo\":[]},{\"Id\":\"q\",\"Name\":\"둘째\",\"Records\":{},\"Undo\":[]}]}";File.WriteAllText(old,oldText);
+  Check(new RecordStore(old) is {Upgraded:true,Data:{Format:2,Profiles.Count:2}}&&File.ReadAllText(old)==oldText,"file without a format number reads as format 1 and is left as it is until a save");
   // 더 새 형식은 읽지 않고, 파일을 건드리지 않고 알린다
-  string newer=Path.Combine(root,"newer.json");File.WriteAllText(newer,saved.Replace("\"Format\": 1","\"Format\": 2"));string newerBefore=UpdateFiles.Sha256(newer);
+  string newer=Path.Combine(root,"newer.json");File.WriteAllText(newer,saved.Replace("{\"Format\":2,","{\"Format\":3,"));string newerBefore=UpdateFiles.Sha256(newer);
   string message="";try{_=new RecordStore(newer);}catch(InvalidDataException e){message=e.Message;}
   Check(message.Contains("새 버전")&&message.Contains("건드리지 않았습니다")&&UpdateFiles.Sha256(newer)==newerBefore&&!File.Exists(newer+".bak")&&!File.Exists(newer+".tmp"),"file of a newer format is refused and left untouched");
  }
