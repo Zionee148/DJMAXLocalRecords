@@ -9,7 +9,7 @@ build   시험용 빌드 셋(9.0.0, 9.0.1, 9.0.2)과 배포 파일(ZIP)을 data\
         커밋된 소스(HEAD)로 만든다. --worktree 를 주면 커밋하지 않은 작업 폴더의 소스로 만든다(개발 중에 쓴다).
         배포하는 빌드와 같은 방법(Release, .NET 실행 환경 포함)으로 만들되 시험용 표시(-p:UpdateTestSource=true)를 더한다.
         그 표시가 있는 빌드만 실행 파일 옆의 update-test.json 이 가리키는 서버에서 새 버전을 찾는다.
-        --old-from 을 주면 9.0.0 만 그 가지나 커밋의 소스로 만든다(예: release-1.1). 개인 자료를 실행 파일 옆에 두던 버전에서
+        --old-from 을 주면 9.0.0 만 그 가지나 커밋의 소스로 만든다(예: v1.1.x 의 소스가 든 커밋). 개인 자료를 실행 파일 옆에 두던 버전에서
         'UserData'를 쓰는 버전으로 올라가는 것, 그 버전으로 되돌아가는 것을 실제 흐름으로 본다.
 run     시나리오마다 새 폴더(data\\updatetest\\<이름>\\runs\\<시나리오>\\app)에 9.0.0 과 합성 기록·설정을 놓고,
         이 PC 안에서만 도는 가짜 릴리즈 서버를 켜고, 프로그램을 실제로 켜서 창의 단추를 눌러 가며 확인한다.
@@ -1370,7 +1370,7 @@ def main() -> int:
     parser.add_argument("name", help="결과 이름(data\\updatetest\\<이름>)")
     parser.add_argument("scenarios", nargs="*", help="run 에서 돌릴 시나리오(주지 않으면 전부)")
     parser.add_argument("--worktree", action="store_true", help="build: 커밋하지 않은 작업 폴더의 소스로 만든다")
-    parser.add_argument("--old-from", help="build: 9.0.0 만 이 가지나 커밋의 소스로 만든다(예: release-1.1)")
+    parser.add_argument("--old-from", help="build: 9.0.0 만 이 가지나 커밋의 소스로 만든다(예: v1.1.x 의 소스가 든 커밋)")
     parser.add_argument("--keep", action="store_true", help="run: 통과한 시나리오의 app 폴더도 남긴다")
     args = parser.parse_args()
     for stream in (sys.stdout, sys.stderr):

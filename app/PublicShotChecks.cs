@@ -16,7 +16,8 @@ namespace LadderRecords;
 //   12-collection-review     판독 검수와 캡처 보기(받아 둔 컬렉션 화면을 줄 때만. 화면 오른쪽 위의 프로필 자리는 흐리게 가린다)
 //   13-stream-address        투컴 연결 허용, 가려진 송출 PC용 주소와 연결 상태
 // 게임 화면 PNG 를 주면 메인 창의 게임 화면과 SCORE 자리에 넣는다.
-// 개인 기록을 쓰지 않는 폴더에서만 돌린다(기록은 저장할 폴더 안의 work 에 쓴다. 단축키를 등록하지 않는다. 투컴은 이 PC 안의 루프백 주소에만 연다)
+// 개인 기록을 쓰지 않는 폴더에서만 돌린다(기록은 저장할 폴더 안에 새로 만드는 work 에 쓴다. 단축키를 등록하지 않는다. 투컴은 이 PC 안의 루프백 주소에만 연다)
+// work 가 이미 있으면 지우지 않고 public-shots-stopped.txt 에 까닭을 남기고 멈춘다(끝 코드 1)
 [System.Runtime.Versioning.SupportedOSPlatform("windows10.0.19041")]
 static class PublicShotChecks
 {
@@ -116,7 +117,13 @@ static class PublicShotChecks
  {
   Directory.CreateDirectory(folder);Theme.Dark=true;
   var notes=new List<string>{$"scale={Theme.Shown}% bar={AppWindow.BarHeight} fonts=[{AppFonts.Ui.Name}, {AppFonts.Head.Name}, {AppFonts.Latin.Name}]"};
-  string work=Path.Combine(folder,"work");if(Directory.Exists(work))Directory.Delete(work,true);Directory.CreateDirectory(work);
+  string work=Path.Combine(folder,"work");
+  if(Directory.Exists(work))
+  {   // 다른 작업의 자료일 수 있어 지우지 않는다: 찍지 않고 까닭만 남긴다
+   File.WriteAllLines(Path.Combine(folder,"public-shots-stopped.txt"),new[]{$"멈춤: 작업 폴더가 이미 있다: {work}","그 안의 자료를 지우지 않으려고 찍지 않았다. 새 저장 폴더를 주거나, 그 폴더가 필요 없으면 직접 지운 뒤 다시 돌린다."});
+   Environment.ExitCode=1;return;
+  }
+  Directory.CreateDirectory(work);
   var store=new RecordStore(Path.Combine(work,"records.json"));
   var sweetSong=catalog.Songs.First(s=>s.Name=="Sweet On You");var sweet=new Selection(sweetSong.Id,8,"SC","노말",0);
   var kamui=Seed(catalog,store,sweet);

@@ -36,8 +36,8 @@ static class Program
  if(args.Contains("--play-store-measure")){PlayStoreChecks.Run();return;}   // 형식 2 의 기록 파일을 줄 수를 늘려 가며 저장하고 읽는 시간과 크기를 잰다
  if(args.Contains("--steam-presence-check")){SteamPresenceChecks.Run();return;}   // 이 PC 의 실제 Steam 으로: 게임이 꺼져 있으면 접속하지 않는지, 끊으면 실행 표시가 돌아오는지
  if(args.Length==2&&args[0]=="--lag-check"){LagChecks.Run(catalog,args[1]);return;}   // 창이 뜨거나 바뀌는 순간의 화면을 빠르게 이어 찍는다
- if(args.Length==2&&args[0]=="--frame-check"){FrameChecks.Run(catalog,args[1]);return;}
- if(args.Length is >=2 and <=4&&args[0]=="--public-shots"){string? Given(int i)=>args.Length>i&&args[i]!="-"?args[i]:null;PublicShotChecks.Run(catalog,args[1],Given(2),Given(3));return;}   // 공개 안내에 싣는 창 그림을 꾸민 기록으로 찍는다   // 제목 띠·글꼴·색을 실제 화면에서 찍어 본다
+ if(args.Length==2&&args[0]=="--frame-check"){FrameChecks.Run(catalog,args[1]);return;}   // 제목 띠·글꼴·색을 실제 화면에서 찍어 본다
+ if(args.Length is >=2 and <=4&&args[0]=="--public-shots"){string? Given(int i)=>args.Length>i&&args[i]!="-"?args[i]:null;PublicShotChecks.Run(catalog,args[1],Given(2),Given(3));return;}   // 공개 안내에 싣는 창 그림을 꾸민 기록으로 찍는다
  if(args.Length==3&&args[0]=="--popup-browser-check"){OverlayPopupChecks.Browser(catalog,args[1],args[2]);return;}   // 실제 Chrome·Edge 로 오버레이 팝업을 열어 본다
  if(args.Contains("--dev-fixtures")){DevFixtureChecks.Run(catalog);return;}
  if(args.Length>=2&&args[0]=="--collection-capture"){CollectionChecks.Capture(args[1],args.Length>2?int.Parse(args[2]):300);return;}   // 사용자가 게임에서 곡을 넘기는 동안 화면을 받아 둔다(키를 보내지 않는다)
